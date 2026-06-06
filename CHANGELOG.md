@@ -3,7 +3,28 @@
 Alle Builds laufen unter Version **1.0**; die Build-Nummer (`CURRENT_PROJECT_VERSION`)
 wird je TestFlight-Upload hochgezählt. Die frühen Builds waren schnelle TestFlight-Iterationen.
 
-## 1.0 (Build 8) — aktuell
+## 1.0 (Build 10) — aktuell
+
+- **FTP-Unterstützung** (`FTPSession`) über **Network.framework / NWConnection** — bewusst
+  NICHT libcurl/rohe Sockets: der NWConnection-Pfad ist Apple-Privacy-integriert (saubere
+  Local-Network-Erlaubnis). Plain FTP (passiv, MLSD/STOR/MKD/MFMT); FTPS-Schalter vorerst
+  geblockt. Gegen pyftpdlib end-to-end verifiziert (connect, rekursives Listing, mkdir,
+  Upload, mtime).
+- **Transport-Abstraktion `RemoteTransport`** + `TransportFactory`; `SMBSession` und
+  `FTPSession` sind austauschbare Implementierungen. Engine/Views sprechen nur das Protokoll.
+- **Protokoll-Umschalter (SMB/FTP)** in der UI + protokollspezifische Felder (SMB: Freigabe/
+  Verschlüsselung; FTP: Port/Passiv/FTPS). `TransferConfig` ersetzt `SMBConfig`.
+
+## 1.0 (Build 9)
+
+- **Äquivalenzkriterium = Dateigröße** (zeitzonensicher): kopieren nur bei fehlend/anderer
+  Größe; gleiche Größe → überspringen. mtime nur für optionalen strengen Modus + Anomalie-Log.
+- **Strenger Zeitvergleich** als Schalter (Standard aus); ignoriert glatte Stunden-Offsets
+  (DST/Zeitzone/FAT).
+- **Pre-Flight** (aktiver `NWConnection`-Probe vor Transfer + im Verbindungstest): klare
+  Diagnose (blockiert/kein Netz/abgelehnt/Timeout) statt „Error 1"; Umgebungs-Report im Log.
+
+## 1.0 (Build 8)
 
 - **AMSMB2 lokal eingebunden & gepatcht** (`Vendor/AMSMB2`):
   - SMB-**Signing = required** im Verbindungsaufbau (gehärtete Server / FRITZ!Box).

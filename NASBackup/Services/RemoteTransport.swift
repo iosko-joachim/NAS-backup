@@ -35,7 +35,10 @@ protocol RemoteTransport: AnyObject {
 /// Erzeugt den passenden Transport zur Konfiguration. Aktuell immer SMB;
 /// hier kommt später die FTP-Verzweigung (z. B. `switch config.proto`) hinein.
 enum TransportFactory {
-    static func make(config: SMBConfig, password: String) -> RemoteTransport {
-        SMBSession(config: config, password: password)
+    static func make(config: TransferConfig, password: String) -> RemoteTransport {
+        switch config.proto {
+        case .smb: return SMBSession(config: config, password: password)
+        case .ftp: return FTPSession(config: config, password: password)
+        }
     }
 }

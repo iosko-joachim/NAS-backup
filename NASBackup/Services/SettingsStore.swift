@@ -6,7 +6,7 @@ import Observation
 @MainActor
 @Observable
 final class SettingsStore {
-    var config: SMBConfig {
+    var config: TransferConfig {
         didSet { persistConfig() }
     }
 
@@ -24,12 +24,12 @@ final class SettingsStore {
     private let sourcesKey = "sourceFolders"
 
     init() {
-        let cfg: SMBConfig
+        let cfg: TransferConfig
         if let data = defaults.data(forKey: configKey),
-           let decoded = try? JSONDecoder().decode(SMBConfig.self, from: data) {
+           let decoded = try? JSONDecoder().decode(TransferConfig.self, from: data) {
             cfg = decoded
         } else {
-            cfg = SMBConfig()
+            cfg = TransferConfig()
         }
         self.config = cfg
 

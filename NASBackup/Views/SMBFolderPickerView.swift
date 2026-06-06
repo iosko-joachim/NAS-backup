@@ -3,7 +3,7 @@ import SwiftUI
 /// Interaktiver Ziel-Browser: verbindet sich mit dem NAS, zeigt die Ordnerstruktur,
 /// erlaubt Navigieren, „Neuer Ordner" und „Hier sichern".
 struct SMBFolderPickerView: View {
-    let config: SMBConfig
+    let config: TransferConfig
     let password: String
     @Binding var selectedPath: String
     @Environment(\.dismiss) private var dismiss

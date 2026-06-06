@@ -59,7 +59,7 @@ final class BackupEngine {
 
     // MARK: - Steuerung
 
-    func start(config: SMBConfig, password: String, sources: [SourceFolder]) {
+    func start(config: TransferConfig, password: String, sources: [SourceFolder]) {
         guard !isRunning else { return }
         cancelToken.reset()
         resetCounters()
@@ -92,7 +92,7 @@ final class BackupEngine {
 
     // MARK: - Hauptablauf
 
-    private func run(config: SMBConfig, password: String, sources: [SourceFolder]) async {
+    private func run(config: TransferConfig, password: String, sources: [SourceFolder]) async {
         Log.write("=== Backup-Start: \(config.host)/\(config.share) Ziel=\(config.targetSubpath.isEmpty ? "(Wurzel)" : config.targetSubpath) Benutzer=\(config.username.isEmpty ? "(guest)" : config.username) Quellen=\(sources.count)")
         var accessedRoots: [URL] = []
         defer {
@@ -135,9 +135,9 @@ final class BackupEngine {
         // 3) Pre-Flight: aktiver Probe-Connect + Klartext-Diagnose (Netz / Berechtigung).
         strictTimeCheck = config.strictTimeCheck
         Log.write(Preflight.environmentReport(host: config.host, share: config.share,
-                                              user: config.username, proto: "SMB"))
+                                              user: config.username, proto: config.proto.label))
         statusMessage = "Prüfe Netzwerkweg …"
-        let pre = await Preflight.probe(host: config.host)
+        let pre = await Preflight.probe(host: config.host, defaultPort: config.probePort)
         Log.write("Pre-Flight: \(pre) — \(pre.message)")
         if !pre.isOK {
             finish(.failed, pre.message)

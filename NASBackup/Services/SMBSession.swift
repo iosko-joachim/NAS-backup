@@ -23,11 +23,11 @@ enum SMBError: LocalizedError {
 /// Bewusst kein Aktor: Aufrufe sind `async` und AMSMB2 ist laut Doku thread-safe.
 /// Bei einem Broken-Pipe baut die Engine die Verbindung über `connect()` neu auf.
 final class SMBSession: RemoteTransport, @unchecked Sendable {
-    private let config: SMBConfig
+    private let config: TransferConfig
     private let password: String
     private var manager: SMB2Manager?
 
-    init(config: SMBConfig, password: String) {
+    init(config: TransferConfig, password: String) {
         self.config = config
         self.password = password
     }

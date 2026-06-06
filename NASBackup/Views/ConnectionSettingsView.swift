@@ -11,8 +11,23 @@ struct ConnectionSettingsView: View {
     var body: some View {
         Form {
             Section("NAS") {
+                Picker("Protokoll", selection: $settings.config.proto) {
+                    ForEach(TransferProtocol.allCases) { p in Text(p.label).tag(p) }
+                }
+                .pickerStyle(.segmented)
+
                 LabeledField(label: "IP / Host", text: $settings.config.host, keyboard: .URL)
-                LabeledField(label: "Freigabe", text: $settings.config.share)
+
+                if settings.config.proto == .smb {
+                    LabeledField(label: "Freigabe", text: $settings.config.share)
+                } else {
+                    HStack {
+                        Text("Port").frame(width: 90, alignment: .leading)
+                        TextField("21", value: $settings.config.ftpPort, format: .number)
+                            .keyboardType(.numberPad)
+                    }
+                }
+
                 LabeledField(label: "Zielordner", text: $settings.config.targetSubpath, placeholder: "z. B. IP13 (leer = Wurzel)")
                 Button {
                     showFolderPicker = true
@@ -31,7 +46,12 @@ struct ConnectionSettingsView: View {
             }
 
             Section("Optionen") {
-                Toggle("SMB-Verschlüsselung erzwingen", isOn: $settings.config.encrypted)
+                if settings.config.proto == .smb {
+                    Toggle("SMB-Verschlüsselung erzwingen", isOn: $settings.config.encrypted)
+                } else {
+                    Toggle("Passiv-Modus (empfohlen)", isOn: $settings.config.ftpPassive)
+                    Toggle("FTPS / TLS (experimentell)", isOn: $settings.config.ftps)
+                }
                 Toggle("Datum an Zielordner anhängen (_JJMMTT)", isOn: $settings.config.appendDateSuffix)
                 Toggle("Strenger Zeitvergleich (auch bei neuerer Datei kopieren)", isOn: $settings.config.strictTimeCheck)
             }
@@ -74,7 +94,7 @@ struct ConnectionSettingsView: View {
         let session: RemoteTransport = TransportFactory.make(config: settings.config, password: settings.password)
         Task {
             // Pre-Flight: erst Netzweg/Berechtigung prüfen (klare Diagnose statt „Error 1").
-            let pre = await Preflight.probe(host: settings.config.host)
+            let pre = await Preflight.probe(host: settings.config.host, defaultPort: settings.config.probePort)
             Log.write("Verbindungstest Pre-Flight: \(pre) — \(pre.message)")
             if !pre.isOK {
                 testOK = false

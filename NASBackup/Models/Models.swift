@@ -1,17 +1,27 @@
 import Foundation
 
+/// Übertragungsprotokoll.
+enum TransferProtocol: String, Codable, CaseIterable, Identifiable {
+    case smb
+    case ftp
+    var id: String { rawValue }
+    var label: String { self == .smb ? "SMB" : "FTP" }
+}
+
 /// Verbindungs- und Zielkonfiguration für das NAS.
 /// Das Passwort wird NICHT hier gespeichert, sondern im Keychain (siehe `KeychainStore`).
-struct SMBConfig: Codable, Equatable {
+struct TransferConfig: Codable, Equatable {
+    /// Protokoll (SMB oder FTP).
+    var proto: TransferProtocol = .smb
     /// IP oder Hostname, z. B. "192.168.178.1"
     var host: String = "192.168.178.1"
-    /// Freigabename (Share), z. B. "FREECOM_HDD"
+    /// Freigabename (Share), z. B. "FREECOM_HDD" — nur SMB.
     var share: String = "FREECOM_HDD"
     /// Benutzername. Für Gastzugriff "guest".
     var username: String = ""
-    /// Zielordner innerhalb der Freigabe, z. B. "IP13". Leer = Wurzel der Freigabe.
+    /// Zielordner (relativ zur Freigabe bzw. zum FTP-Login-Verzeichnis), z. B. "IP13".
     var targetSubpath: String = ""
-    /// SMB-Verschlüsselung erzwingen (manche FRITZ!Box-Firmwares mögen das nicht).
+    /// SMB-Verschlüsselung erzwingen (manche FRITZ!Box-Firmwares mögen das nicht). — nur SMB.
     var encrypted: Bool = false
     /// Hängt an jeden kopierten Quell-Ordner ein Datums-Suffix `_JJMMTT` an (wie Stefans manueller Schritt).
     var appendDateSuffix: Bool = false
@@ -19,14 +29,27 @@ struct SMBConfig: Codable, Equatable {
     /// FAT/Zeitzonen/DST-Versatz sonst unveränderte Dateien endlos neu kopieren lässt.
     /// Default = Vergleich nur über Dateigröße (zeitzonensicher).
     var strictTimeCheck: Bool = false
+    // MARK: FTP-spezifisch
+    /// FTP-Port (Standard 21).
+    var ftpPort: Int = 21
+    /// Passiv-Modus (auf iOS praktisch immer nötig).
+    var ftpPassive: Bool = true
+    /// FTPS (explizite TLS) — noch experimentell.
+    var ftps: Bool = false
+
+    /// Default-Port fürs Pre-Flight-Probing je Protokoll.
+    var probePort: UInt16 { proto == .smb ? 445 : UInt16(ftpPort) }
 
     var isComplete: Bool {
-        !host.trimmingCharacters(in: .whitespaces).isEmpty
-            && !share.trimmingCharacters(in: .whitespaces).isEmpty
+        let hostOK = !host.trimmingCharacters(in: .whitespaces).isEmpty
+        switch proto {
+        case .smb: return hostOK && !share.trimmingCharacters(in: .whitespaces).isEmpty
+        case .ftp: return hostOK
+        }
     }
 
     /// Schlüssel, unter dem das Passwort im Keychain abgelegt wird.
-    var keychainAccount: String { "\(username)@\(host)/\(share)" }
+    var keychainAccount: String { "\(proto.rawValue)://\(username)@\(host)/\(share)" }
 }
 
 /// Eine vom Nutzer gewählte Quelle (Ordner aus „On My iPhone" o. ä.),
