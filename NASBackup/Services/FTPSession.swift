@@ -35,6 +35,8 @@ final class FTPSession: RemoteTransport, @unchecked Sendable {
     private let queue = DispatchQueue(label: "ftp.session")
     private var control: NWConnection?
     private var lineBuffer = ""
+    private var preferList = false        // FRITZ!Box & Co. können kein MLSD -> LIST
+    private var mfmtUnsupported = false    // FRITZ!Box kann kein MFMT -> mtime nicht setzbar
 
     init(config: TransferConfig, password: String) {
         // evtl. ":port" aus host entfernen (FTP nutzt eigenes Portfeld)
@@ -94,7 +96,7 @@ final class FTPSession: RemoteTransport, @unchecked Sendable {
     }
 
     func listDirectories(atPath basePath: String) async throws -> [String] {
-        let entries = try await mlsd(path: SMBSession.normalize(basePath))
+        let entries = try await listing(path: SMBSession.normalize(basePath))
         return entries.filter { $0.isDir }.map { $0.name }
             .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
     }
@@ -143,12 +145,18 @@ final class FTPSession: RemoteTransport, @unchecked Sendable {
     }
 
     func setModificationDate(_ date: Date, at remotePath: String) async throws {
+        // Best effort. Viele FTP-Server (FRITZ!Box) können MFMT nicht — nach dem ersten
+        // 5xx dauerhaft abschalten (spart Round-Trips + Log-Lärm). Kriterium ist ohnehin Größe.
+        guard !mfmtUnsupported else { return }
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
         f.timeZone = TimeZone(identifier: "UTC")
         f.dateFormat = "yyyyMMddHHmmss"
-        // Best effort — viele FTP-Server (FRITZ!Box) können MFMT nicht; Fehler ignorieren.
-        _ = try? await command("MFMT \(f.string(from: date)) \(SMBSession.normalize(remotePath))")
+        if let r = try? await command("MFMT \(f.string(from: date)) \(SMBSession.normalize(remotePath))"),
+           (500..<600).contains(r.code) {
+            mfmtUnsupported = true
+            Log.write("ftp: MFMT nicht unterstützt → Zeitstempel werden nicht gesetzt (Größen-Abgleich bleibt korrekt)")
+        }
     }
 
     // MARK: - MLSD
@@ -156,7 +164,7 @@ final class FTPSession: RemoteTransport, @unchecked Sendable {
     private struct MLSDEntry { let name: String; let isDir: Bool; let size: Int64; let modify: Date? }
 
     private func mlsdRecursive(path: String, into snap: inout RemoteSnapshot) async throws {
-        let entries = try await mlsd(path: path)
+        let entries = try await listing(path: path)
         for e in entries {
             let full = path.isEmpty ? e.name : path + "/" + e.name
             if e.isDir {
@@ -168,10 +176,32 @@ final class FTPSession: RemoteTransport, @unchecked Sendable {
         }
     }
 
-    private func mlsd(path: String) async throws -> [MLSDEntry] {
+    /// Verzeichnis-Listing mit MLSD; fällt automatisch auf LIST zurück, wenn der Server
+    /// MLSD nicht kann (FRITZ!Box → 500). Danach wird dauerhaft LIST genutzt.
+    private func listing(path: String) async throws -> [MLSDEntry] {
+        if !preferList {
+            if let entries = try await tryListing(cmd: path.isEmpty ? "MLSD" : "MLSD \(path)",
+                                                  parser: parseMLSD) {
+                return entries
+            }
+            preferList = true
+            Log.write("ftp: MLSD nicht unterstützt → nutze LIST")
+        }
+        if let entries = try await tryListing(cmd: path.isEmpty ? "LIST" : "LIST \(path)",
+                                              parser: parseLIST) {
+            return entries
+        }
+        throw FTPError.unexpectedReply(500, "Verzeichnis-Listing fehlgeschlagen")
+    }
+
+    /// Führt ein datenkanal-basiertes Listing aus. Liefert `nil`, wenn der Befehl mit 5xx
+    /// (nicht unterstützt) abgelehnt wird — dann probiert der Aufrufer eine Alternative.
+    private func tryListing(cmd: String, parser: (String) -> [MLSDEntry]) async throws -> [MLSDEntry]? {
         let data = try await openDataConnection()
         defer { data.cancel() }
-        try expect1xx(try await command(path.isEmpty ? "MLSD" : "MLSD \(path)"))
+        let reply = try await command(cmd)
+        if (500..<600).contains(reply.code) { return nil }
+        try expect1xx(reply)
         var raw = Data()
         while true {
             let (chunk, done) = try await receive(data)
@@ -179,7 +209,7 @@ final class FTPSession: RemoteTransport, @unchecked Sendable {
             if done { break }
         }
         try expect2xx(try await readReply())            // 226
-        return parseMLSD(String(decoding: raw, as: UTF8.self))
+        return parser(String(decoding: raw, as: UTF8.self))
     }
 
     private func parseMLSD(_ text: String) -> [MLSDEntry] {
@@ -210,6 +240,42 @@ final class FTPSession: RemoteTransport, @unchecked Sendable {
             result.append(MLSDEntry(name: name, isDir: type == "dir", size: size, modify: modify))
         }
         return result
+    }
+
+    /// Parser für klassisches LIST (Unix `ls -l`-Format), z. B.:
+    /// `-rw-r--r--  1 owner group   12345 May 23 21:44 Datei mit Leerzeichen.pdf`
+    /// `drwxr-xr-x  2 owner group    4096 Jan 02 17:35 Ordner`
+    /// Größe wird zuverlässig gelesen; mtime bleibt offen (Kriterium ist die Größe).
+    private func parseLIST(_ text: String) -> [MLSDEntry] {
+        var result: [MLSDEntry] = []
+        for line in text.components(separatedBy: "\r\n") where !line.isEmpty {
+            guard let first = line.first, first == "d" || first == "-" else { continue } // nur Datei/Ordner
+            let cols = line.split(separator: " ", omittingEmptySubsequences: true)
+            guard cols.count >= 9 else { continue }
+            let size = Int64(cols[4]) ?? 0
+            // Name = alles nach den 8 Feldern (behält Leerzeichen im Dateinamen).
+            let name = Self.remainderAfterFields(line, fields: 8)
+            if name.isEmpty || name == "." || name == ".." { continue }
+            result.append(MLSDEntry(name: name, isDir: first == "d", size: size, modify: nil))
+        }
+        return result
+    }
+
+    /// Liefert den Rest einer Zeile nach `fields` whitespace-getrennten Feldern.
+    private static func remainderAfterFields(_ line: String, fields: Int) -> String {
+        var idx = line.startIndex
+        var seen = 0
+        var inField = false
+        while idx < line.endIndex {
+            let c = line[idx]
+            if c == " " || c == "\t" {
+                if inField { inField = false; if seen == fields { return String(line[line.index(after: idx)...]).trimmingCharacters(in: .whitespaces) } }
+            } else {
+                if !inField { inField = true; seen += 1 }
+            }
+            idx = line.index(after: idx)
+        }
+        return ""
     }
 
     // MARK: - Passiver Datenkanal

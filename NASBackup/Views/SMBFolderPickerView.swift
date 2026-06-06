@@ -91,6 +91,12 @@ struct SMBFolderPickerView: View {
     private func initialLoad() async {
         components = selectedPath.split(separator: "/").map(String.init)
         await load()
+        // Wenn der gespeicherte Zielpfad nicht (mehr) existiert, zur Wurzel zurückfallen,
+        // damit der Nutzer von oben navigieren kann (z. B. nach Protokollwechsel SMB→FTP).
+        if error != nil && !components.isEmpty {
+            components = []
+            await load()
+        }
     }
 
     private func load() async {

@@ -3,7 +3,18 @@
 Alle Builds laufen unter Version **1.0**; die Build-Nummer (`CURRENT_PROJECT_VERSION`)
 wird je TestFlight-Upload hochgezählt. Die frühen Builds waren schnelle TestFlight-Iterationen.
 
-## 1.0 (Build 10) — aktuell
+## 1.0 (Build 11) — aktuell
+
+- **FTP: LIST-Fallback**, wenn der Server kein **MLSD** kann (FRITZ!Box → 500). Damit
+  funktionieren Snapshot/Inkrementell-Abgleich **und** der NAS-Browser auch an der FRITZ!Box.
+  LIST-Parser (Unix-`ls -l`) liest Größe + Typ, inkl. Dateinamen mit Leerzeichen.
+- **MFMT** nach erstem „nicht unterstützt" (5xx) dauerhaft abschalten — spart Round-Trips/Log;
+  Größen-Kriterium bleibt korrekt.
+- NAS-Browser fällt bei ungültigem gespeichertem Zielpfad automatisch auf die Wurzel zurück
+  (z. B. nach Protokollwechsel SMB→FTP), damit man von oben navigieren kann.
+- Verifiziert gegen FRITZ!Box-ähnlichen FTP-Server (MLSD/MFMT deaktiviert).
+
+## 1.0 (Build 10)
 
 - **FTP-Unterstützung** (`FTPSession`) über **Network.framework / NWConnection** — bewusst
   NICHT libcurl/rohe Sockets: der NWConnection-Pfad ist Apple-Privacy-integriert (saubere
