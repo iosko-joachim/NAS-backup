@@ -54,6 +54,8 @@ final class BackupEngine {
     #endif
 
     private let maxAttempts = 4
+    private var strictTimeCheck = false
+    private var timeAnomalyCount = 0
 
     // MARK: - Steuerung
 
@@ -85,6 +87,7 @@ final class BackupEngine {
         totalBytesToCopy = 0; bytesTransferred = 0
         currentFileName = ""; currentFileSize = 0; currentFileBytes = 0
         errors = []
+        timeAnomalyCount = 0
     }
 
     // MARK: - Hauptablauf
@@ -129,7 +132,19 @@ final class BackupEngine {
             planned.append(contentsOf: scan(root: root.url, targetSubpath: config.targetSubpath, folderName: folderName))
         }
 
-        // 3) Verbinden und Remote-Bestand einmalig erfassen.
+        // 3) Pre-Flight: aktiver Probe-Connect + Klartext-Diagnose (Netz / Berechtigung).
+        strictTimeCheck = config.strictTimeCheck
+        Log.write(Preflight.environmentReport(host: config.host, share: config.share,
+                                              user: config.username, proto: "SMB"))
+        statusMessage = "Prüfe Netzwerkweg …"
+        let pre = await Preflight.probe(host: config.host)
+        Log.write("Pre-Flight: \(pre) — \(pre.message)")
+        if !pre.isOK {
+            finish(.failed, pre.message)
+            return
+        }
+
+        // 4) Verbinden und Remote-Bestand einmalig erfassen.
         statusMessage = "Verbinde mit \(config.host) …"
         let session = SMBSession(config: config, password: password)
         do {
@@ -175,6 +190,12 @@ final class BackupEngine {
         }
         totalFilesToCopy = queue.count
         totalBytesToCopy = queue.reduce(0) { $0 + $1.size }
+        Log.write("Abgleich: \(queue.count) zu kopieren, \(skippedCount) übersprungen "
+            + "(Kriterium: Größe\(strictTimeCheck ? " + Zeit (streng)" : ""))")
+        if timeAnomalyCount > 0 {
+            Log.write("Hinweis: \(timeAnomalyCount) Datei(en) mit Stunden-Zeitversatz "
+                + "(Zeitzone/DST/FAT) — werden über die Größe korrekt übersprungen, nicht neu kopiert.")
+        }
 
         if queue.isEmpty {
             await session.disconnect()
@@ -320,11 +341,25 @@ final class BackupEngine {
     private func decide(file: PlannedFile, remote: [String: RemoteEntry]) -> SkipDecision {
         guard let entry = remote[SMBSession.normalize(file.remotePath)] else { return .copyMissing }
         if entry.size != file.size { return .copyDifferentSize }
+        // Größe gleich. Default: überspringen (zeitzonensicher). mtime nur für Diagnose /
+        // optionalen strengen Modus — FAT/DST/Zeitzonen-Versatz darf NICHT zum Neu-Kopieren führen.
         if let rdate = entry.modificationDate {
-            // 2s Toleranz wegen FAT-Zeitauflösung.
-            if file.modificationDate.timeIntervalSince(rdate) > 2 { return .copyNewer }
+            let diff = file.modificationDate.timeIntervalSince(rdate)
+            if Self.looksLikeTimezoneOffset(diff) { timeAnomalyCount += 1 }
+            if strictTimeCheck, diff > 2, !Self.looksLikeTimezoneOffset(diff) {
+                return .copyNewer
+            }
         }
         return .skipUpToDate
+    }
+
+    /// Erkennt einen Versatz, der nach Zeitzone/DST/FAT aussieht (nahe einem ganzen
+    /// Stundenvielfachen, ≥ 30 min) — solche Differenzen NICHT als „neuer" werten.
+    static func looksLikeTimezoneOffset(_ diff: TimeInterval) -> Bool {
+        let a = abs(diff)
+        guard a >= 1800 else { return false }
+        let hours = (a / 3600).rounded()
+        return hours >= 1 && abs(a - hours * 3600) < 120
     }
 
     private func makeDateSuffix(enabled: Bool) -> String {

@@ -15,6 +15,10 @@ struct SMBConfig: Codable, Equatable {
     var encrypted: Bool = false
     /// Hängt an jeden kopierten Quell-Ordner ein Datums-Suffix `_JJMMTT` an (wie Stefans manueller Schritt).
     var appendDateSuffix: Bool = false
+    /// Strenger Modus: zusätzlich bei NEUERER Quelle kopieren (mtime). Standard aus, weil
+    /// FAT/Zeitzonen/DST-Versatz sonst unveränderte Dateien endlos neu kopieren lässt.
+    /// Default = Vergleich nur über Dateigröße (zeitzonensicher).
+    var strictTimeCheck: Bool = false
 
     var isComplete: Bool {
         !host.trimmingCharacters(in: .whitespaces).isEmpty

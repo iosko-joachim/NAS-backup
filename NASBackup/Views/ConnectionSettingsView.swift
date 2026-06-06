@@ -33,6 +33,7 @@ struct ConnectionSettingsView: View {
             Section("Optionen") {
                 Toggle("SMB-Verschlüsselung erzwingen", isOn: $settings.config.encrypted)
                 Toggle("Datum an Zielordner anhängen (_JJMMTT)", isOn: $settings.config.appendDateSuffix)
+                Toggle("Strenger Zeitvergleich (auch bei neuerer Datei kopieren)", isOn: $settings.config.strictTimeCheck)
             }
 
             Section {
@@ -72,6 +73,15 @@ struct ConnectionSettingsView: View {
         LocalNetwork.requestPermission()   // Local-Network-Dialog ggf. auslösen
         let session = SMBSession(config: settings.config, password: settings.password)
         Task {
+            // Pre-Flight: erst Netzweg/Berechtigung prüfen (klare Diagnose statt „Error 1").
+            let pre = await Preflight.probe(host: settings.config.host)
+            Log.write("Verbindungstest Pre-Flight: \(pre) — \(pre.message)")
+            if !pre.isOK {
+                testOK = false
+                testResult = pre.message
+                testing = false
+                return
+            }
             do {
                 try await session.test()
                 await session.disconnect()
