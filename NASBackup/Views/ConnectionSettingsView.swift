@@ -71,7 +71,7 @@ struct ConnectionSettingsView: View {
         testing = true
         testResult = nil
         LocalNetwork.requestPermission()   // Local-Network-Dialog ggf. auslösen
-        let session = SMBSession(config: settings.config, password: settings.password)
+        let session: RemoteTransport = TransportFactory.make(config: settings.config, password: settings.password)
         Task {
             // Pre-Flight: erst Netzweg/Berechtigung prüfen (klare Diagnose statt „Error 1").
             let pre = await Preflight.probe(host: settings.config.host)

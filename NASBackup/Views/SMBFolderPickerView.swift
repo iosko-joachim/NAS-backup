@@ -8,7 +8,7 @@ struct SMBFolderPickerView: View {
     @Binding var selectedPath: String
     @Environment(\.dismiss) private var dismiss
 
-    @State private var session: SMBSession?
+    @State private var session: RemoteTransport?
     @State private var components: [String] = []
     @State private var dirs: [String] = []
     @State private var loading = false
@@ -97,7 +97,7 @@ struct SMBFolderPickerView: View {
         loading = true; error = nil
         do {
             if session == nil {
-                let s = SMBSession(config: config, password: password)
+                let s = TransportFactory.make(config: config, password: password)
                 try await s.connect()
                 session = s
             }

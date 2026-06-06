@@ -146,7 +146,7 @@ final class BackupEngine {
 
         // 4) Verbinden und Remote-Bestand einmalig erfassen.
         statusMessage = "Verbinde mit \(config.host) …"
-        let session = SMBSession(config: config, password: password)
+        let session: RemoteTransport = TransportFactory.make(config: config, password: password)
         do {
             try await session.connect()
         } catch {
@@ -255,7 +255,7 @@ final class BackupEngine {
     /// wird die SMB-Verbindung neu aufgebaut (heilt „broken pipe"). Danach wird die
     /// Änderungszeit am Ziel gesetzt.
     private func copyWithRetry(
-        file: PlannedFile, session: SMBSession
+        file: PlannedFile, session: RemoteTransport
     ) async -> CopyOutcome {
         let token = cancelToken
         // Fortschritt an MainActor bridgen, Abbruch über den Token prüfen.
