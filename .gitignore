@@ -1,0 +1,18 @@
+# XcodeGen erzeugt das Projekt aus project.yml
+NASBackup.xcodeproj/
+
+# Build-Artefakte
+build/
+DerivedData/
+*.xcarchive
+*.xcuserstate
+.DS_Store
+
+# SwiftPM
+.swiftpm/
+.build/
+Package.resolved
+
+# Vendored package: Quellcode wird eingecheckt, Build-/Index-Artefakte und .git nicht
+Vendor/**/.build/
+Vendor/**/.git/

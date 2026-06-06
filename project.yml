@@ -1,0 +1,58 @@
+name: NASBackup
+options:
+  bundleIdPrefix: de.jomative
+  deploymentTarget:
+    iOS: "18.0"
+  developmentLanguage: de
+  createIntermediateGroups: true
+
+packages:
+  AMSMB2:
+    path: Vendor/AMSMB2
+
+targets:
+  NASBackup:
+    type: application
+    platform: iOS
+    sources:
+      - path: NASBackup
+    dependencies:
+      - package: AMSMB2
+        product: AMSMB2
+        embed: true
+        codeSign: true
+    info:
+      path: NASBackup/Info.plist
+      properties:
+        CFBundleDisplayName: NAS Backup
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        # SMB läuft über das lokale Netzwerk -> iOS verlangt diese Erklärung
+        # und zeigt beim ersten Verbindungsversuch den Local-Network-Dialog.
+        NSLocalNetworkUsageDescription: >-
+          NAS Backup verbindet sich mit deinem NAS (z. B. dem USB-Laufwerk an
+          der FRITZ!Box) im lokalen Netzwerk, um die ausgewählten Ordner dorthin
+          zu sichern.
+        # Nötig, damit der Bonjour-Browse den Local-Network-Dialog auslösen darf.
+        NSBonjourServices:
+          - _smb._tcp
+        # Datei-Zugriff erfolgt über den Dokumenten-Picker (keine zusätzliche
+        # Berechtigung nötig); App tritt nicht als Dateianbieter auf.
+        LSSupportsOpeningDocumentsInPlace: true
+        # Macht NASBackup.log in der Files-App sichtbar (Auf meinem iPhone -> NAS Backup)
+        UIFileSharingEnabled: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: de.jomative.nasbackup
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "8"
+        DEVELOPMENT_TEAM: XV75SD8TB6
+        CODE_SIGN_STYLE: Automatic
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ENABLE_USER_SCRIPT_SANDBOXING: YES
+        SWIFT_EMIT_LOC_STRINGS: YES
