@@ -6,51 +6,58 @@ das App-Protokoll (`NASBackup.log` → „Protokoll teilen").
 
 ---
 
-## 🔴 OFFEN: FRITZ!Box-Verbindung scheitert mit „Operation not permitted" (EPERM)
+## 🟢 GEKLÄRT: SMB scheitert mit „Operation not permitted" (EPERM) — iOS blockt rohe Sockets
 
 **Symptom (aus dem Protokoll):**
 ```
-smb2: Read from socket failed, errno:9. Closing socket.
+Verbindungstest Pre-Flight: ok — Netzwerkweg frei.        <- NWConnection-Probe gelingt!
+smb2: Read from socket failed, errno:9. Closing socket.    <- libsmb2-Rohsocket
 Verbindungstest FEHLER: NSPOSIXErrorDomain 1 | Error code Operation not permitted:
 ```
-Tritt auf manchen Geräten beim Verbinden zur realen FRITZ!Box auf — **obwohl die
-Files-App mit denselben Zugangsdaten funktioniert** und der Schalter „Lokales Netzwerk"
-laut Nutzer aktiv ist.
 
-**Einordnung:** `errno 9` (EBADF) + `EPERM` ist die typische Signatur, dass **iOS den
-rohen Socket der App killt** — die **Local-Network-Privacy-Durchsetzung**. Files läuft über
-Apples privilegierten SMB-Pfad und ist davon nicht betroffen; unsere App nutzt **libsmb2 mit
-rohen BSD-Sockets**.
+**Beweisführung (Build 9/10, iOS 18.7.8):** Der **Pre-Flight über `NWConnection` ist `ok`** —
+und NWConnection unterliegt **derselben** „Lokales Netzwerk"-Berechtigung. Wäre die Erlaubnis
+nicht erteilt, würde **auch der Pre-Flight** blockiert. Er gelingt aber. **→ Die Berechtigung
+IST erteilt.** Trotzdem bekommt **libsmb2 (rohe BSD-Sockets) EPERM**.
 
-**Mögliche Ursachen / Verdächtige:**
-- Local-Network-Berechtigungsstatus **hängt/korrupt** (häufig nach mehreren
-  Installations-/Lösch-Zyklen) — Schalter zeigt „an", Zugriff wird dennoch verweigert.
-- **VPN**, **Sperrmodus (Lockdown Mode)**, **Content-/Werbeblocker** oder ein
-  **Konfigurationsprofil** fängt den Socket ab (ebenfalls EPERM).
+**Erkenntnis:** Auf **modernem iOS (≥ 18.7)** erlaubt das System **Network.framework
+(NWConnection)**, blockt aber **rohe BSD-Sockets** fürs lokale Netz — **selbst bei erteilter
+Berechtigung**. Es war also nie Gast/Signing/Schalter/VPN, sondern diese Socket-Einschränkung.
+(Auf älteren iOS-Versionen lief libsmb2 noch — z. B. der 922-Dateien-Test.)
 
-**Aktuelle Gegenmaßnahmen:**
-- App **löschen → iPhone neu starten → aus TestFlight neu installieren →** beim ersten
-  Start „Lokales Netzwerk" **erlauben** (Neustart räumt einen hängenden Status auf).
-- VPN / Sperrmodus / Blocker prüfen und testweise deaktivieren.
+**Lösung: FTP statt SMB.** Der FTP-Transport (`FTPSession`) läuft über **NWConnection** und ist
+damit nicht betroffen — er verbindet und kopiert auf genau dem Gerät, auf dem SMB scheitert
+(in Stefans Tests bestätigt). **SMB via libsmb2 ist auf modernem iOS für lokale Netze faktisch
+eine Sackgasse.**
 
-**Noch zu klären / mögliche App-seitige Lösung:** Verbindung künftig über
-**Network.framework (`NWConnection`)** statt roher Sockets aufbauen bzw. das Socket-Handle an
-libsmb2 übergeben, damit der Zugriff sauber mit der iOS-Local-Network-Privacy integriert.
-Ein Kontrolltest gegen Standard-Samba (mit erteilter Erlaubnis) verbindet erfolgreich — die
-App-Logik an sich funktioniert.
+**Offen/optional:** SMB über NWConnection tunneln (Socket-Handle an libsmb2 übergeben) — großer
+Aufwand, nur falls SMB zwingend nötig wird. Pragmatisch: **FTP nutzen.** Mögliche UX-Politur:
+bei genau dieser SMB-Signatur automatisch „→ bitte auf FTP umschalten" anzeigen; ggf. FTP als
+Standardprotokoll.
+
+> Hinweis: Das frühere „🟡 IN ARBEIT: SMB-Signing"-Thema ist damit **gegenstandslos** — der
+> Abbruch passiert auf Socket-Ebene, lange vor der SMB-Aushandlung. Signing/Dialekt waren nicht
+> die Ursache.
 
 ---
 
-## 🟡 IN ARBEIT: SMB-Signing / Dialekt-Aushandlung libsmb2 ↔ FRITZ!Box
+## 🟢 FTP: funktioniert (NWConnection) — Eigenheiten der FRITZ!Box
 
-FRITZ!OS (internes Samba) ist bei der SMB-Aushandlung strenger als manche NAS. AMSMB2-Default
-war Signing „enabled"; ab Build 8 erzwingt der gepatchte `initClient` **Signing = required**.
-libsmb2 meldet relevante Fälle selbst, u. a.:
-- `Signing required by server. Session ...`
-- `Encryption requested but server ...`
+FTP ist auf modernem iOS der **zuverlässige** Transport. FRITZ!Box-spezifische Punkte:
 
-Ob Signing=required allein reicht, ist noch offen (überlagert vom EPERM-Thema oben). Weitere
-Stellschraube: Dialekt auf **SMB 3.x / 3.1.1** erzwingen (`smb2_set_version`).
+- **Kein MLSD:** FRITZ!Box-FTP beantwortet `MLSD` mit `500`. Ab **Build 11** schaltet die App
+  automatisch auf **`LIST`** um (Unix-`ls -l`-Parser, liest Größe/Typ inkl. Namen mit
+  Leerzeichen) → Snapshot, Inkrementell-Abgleich und NAS-Browser funktionieren.
+- **Kein MFMT:** `MFMT` (mtime setzen) → `500`. Ab Build 11 nach dem ersten 5xx dauerhaft
+  abgeschaltet. Unkritisch, da Vergleich über die **Größe** läuft.
+- **Pfadstruktur / „kein Share-Feld" bei FTP:** FRITZ!Box-Pfad ist
+  `IP / Share (FB6490SO) / Ordner (FREECOM_HDD) / …`. Bei FTP gibt es **kein Share-Feld** — der
+  **komplette Pfad ab FTP-Wurzel** gehört in den **Zielordner**. **Kein `chdir` nötig:** die
+  FRITZ!Box akzeptiert mehrstufige Pfade (`MKD a/b/c ⇐ 257`); die App legt exakt den
+  übergebenen Pfad an. Fehler „landet im Halbleiterspeicher statt auf der Platte" = Zielpfad war
+  unvollständig (`FB6490SO` statt bis `…/FREECOM_HDD/IP13`). **Lösung:** Host = **nur die IP**,
+  Zielordner leeren, **„Auf dem NAS auswählen"** → bis `FREECOM_HDD` navigieren → `IP13`
+  anlegen/wählen. Der Browser baut den vollständigen Pfad.
 
 ---
 

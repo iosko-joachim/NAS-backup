@@ -9,11 +9,13 @@ Entstanden aus einer konkreten Anforderung: Der bisherige Workflow (Files → �
 Owlfiles") brach bei großen Mengen (~10 GB / 10.000 Dateien) unzuverlässig ab
 (`Socket Error 32 [Broken pipe]`). NAS Backup macht denselben Job gezielt und robust.
 
-> **Status:** Funktioniert End-to-End gegen Standard-Samba (verifiziert: 922 Dateien,
-> verschachtelte Ordner, erhaltene Zeitstempel, inkrementelles Überspringen). Verteilung
-> über **TestFlight**. **Offen:** Verbindung gegen eine reale FRITZ!Box scheitert auf
-> manchen Geräten mit `Operation not permitted` (iOS-Local-Network-Durchsetzung auf den
-> rohen Sockets von libsmb2) — siehe [ISSUES.md](ISSUES.md).
+> **Status:** Unterstützt **SMB und FTP** (umschaltbar). SMB end-to-end gegen Standard-Samba
+> verifiziert (922 Dateien, verschachtelte Ordner, Zeitstempel, inkrementelles Überspringen).
+> **Wichtig:** Auf **modernem iOS (≥ 18.7)** blockt das System die **rohen Sockets** von
+> libsmb2 fürs lokale Netz selbst bei erteilter Berechtigung → **SMB scheitert dort**. Der
+> **FTP-Transport läuft über `NWConnection`** (Apple-Privacy-integriert) und **funktioniert auf
+> genau diesen Geräten** — daher ist **FTP an der FRITZ!Box der empfohlene Weg**. Details &
+> Begründung: [ISSUES.md](ISSUES.md). Verteilung über **TestFlight** (aktuell Build 11).
 
 ## Funktionen
 
