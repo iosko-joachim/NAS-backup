@@ -191,3 +191,37 @@ Der aktuelle Blocker (iOS-Local-Network-EPERM) trifft **jede** LAN-Verbindung �
 - FRITZ!Box-Oberfläche: **Heimnetz → USB/Speicher → Zugriff über SMB** aktivieren; Laufwerk freigeben.
 - **FRITZ!Box-Benutzer** mit **„Zugang zu NAS-Inhalten"** (Lese/Schreib) verwenden — nicht Gast.
 - SMB-Version „automatisch"; FRITZ!OS nutzt SMB2/3 (kein SMBv1).
+
+---
+
+## 🔵 Fernzugriff aufs NAS via VPN (Test über Distanz)
+
+    **Kontext:** Das Test-NAS (FRITZ!Box) steht ~300 km entfernt. Um die echte Box zu
+    erreichen/zu testen, ohne vor Ort zu sein, bietet sich ein VPN ins Heimnetz an.
+
+    **Lösung:** Die FRITZ!Box bringt VPN selbst mit:
+    - FRITZ!OS 7.50+ → **WireGuard** (einfachste Variante): auf der Box einen VPN-Zugang
+      anlegen, Konfiguration exportieren, auf dem iPhone in der WireGuard-App / den iOS-
+      VPN-Einstellungen importieren.
+    - Ältere Firmware → IPSec / „FRITZ!Fernzugang".
+
+    Danach ist das iPhone logisch in Stefans Heimnetz (192.168.178.x) und erreicht die NAS
+    unter `192.168.178.1`, als wäre man vor Ort. SMB (TCP/445) läuft durch den Tunnel.
+
+    **Wofür VPN geeignet ist:**
+    - SMB-/Erreichbarkeits-Tests gegen die **echte** FRITZ!Box (Login, Signing/Dialekt,
+      Freigabename) — isoliert vom Local-Network-Thema.
+    - Latenz/Bandbreite über die Distanz stören beim Testen nicht (nur ein 10-GB-Vollbackup
+      wäre langsam).
+
+    **Wichtiger Haken (Local Network):**
+    VPN-Verkehr läuft über ein Tunnel-Interface (utun) und gilt für iOS i. d. R. **nicht** als
+    „lokales Netzwerk". Damit wird die **iOS-Local-Network-Berechtigung** (der vermutete
+    EPERM-Blocker) über VPN evtl. gar nicht ausgelöst bzw. greift anders. Folgen:
+    - Ein **Erfolg über VPN beweist NICHT**, dass die direkte lokale Verbindung (ohne VPN,
+      iPhone im Heim-WLAN) funktioniert.
+    - Das Local-Network-Permission-Problem muss am Ende trotzdem auf dem **lokalen** Weg
+      (ohne VPN) verifiziert werden — VPN umgeht diese Hürde, statt sie nachzustellen.
+
+    **Fazit:** VPN (FRITZ!Box-WireGuard) ist gut, um die **SMB-Seite** gegen die reale Box zu
+    klären; das **Local-Network-Thema** bleibt separat lokal zu prüfen.
