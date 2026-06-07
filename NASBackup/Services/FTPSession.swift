@@ -91,15 +91,29 @@ final class FTPSession: RemoteTransport, @unchecked Sendable {
         control = nil
     }
 
-    func snapshot(basePath: String) async throws -> RemoteSnapshot {
+    func snapshot(basePath: String,
+                  scope: Set<String>,
+                  isCancelled: @escaping @Sendable () -> Bool) async throws -> RemoteSnapshot {
         var snap = RemoteSnapshot()
-        let base = SMBSession.normalize(basePath)
-        do {
-            try await mlsdRecursive(path: base, into: &snap)
-            snap.baseExists = true
-        } catch {
-            // Basisordner existiert evtl. nicht -> leer behandeln.
-            return RemoteSnapshot()
+        snap.baseExists = true
+        // NUR die Verzeichnisse listen, in denen geplante Dateien liegen (deren Eltern) —
+        // NICHT den kompletten Zielbaum rekursiv. FTP hat kein serverseitiges Rekursiv-List,
+        // jeder Ordner = ein PASV+LIST. Bei großem Zielbestand (tausende Altordner) sank das
+        // damit von Minuten auf Sekunden. Zwischen den Ordnern wird der Abbruch geprüft.
+        for dir in scope.sorted() {
+            if isCancelled() { throw FTPError.cancelled }
+            let entries: [MLSDEntry]
+            do {
+                entries = try await listing(path: dir)
+            } catch {
+                // Ordner existiert (noch) nicht → dort gibt es nichts zu vergleichen.
+                continue
+            }
+            snap.directories.insert(dir)
+            for e in entries where !e.isDir {
+                let full = dir.isEmpty ? e.name : dir + "/" + e.name
+                snap.files[full] = RemoteEntry(size: e.size, modificationDate: e.modify)
+            }
         }
         return snap
     }
@@ -171,19 +185,6 @@ final class FTPSession: RemoteTransport, @unchecked Sendable {
     // MARK: - MLSD
 
     private struct MLSDEntry { let name: String; let isDir: Bool; let size: Int64; let modify: Date? }
-
-    private func mlsdRecursive(path: String, into snap: inout RemoteSnapshot) async throws {
-        let entries = try await listing(path: path)
-        for e in entries {
-            let full = path.isEmpty ? e.name : path + "/" + e.name
-            if e.isDir {
-                snap.directories.insert(full)
-                try await mlsdRecursive(path: full, into: &snap)
-            } else {
-                snap.files[full] = RemoteEntry(size: e.size, modificationDate: e.modify)
-            }
-        }
-    }
 
     /// Verzeichnis-Listing mit MLSD; fällt automatisch auf LIST zurück, wenn der Server
     /// MLSD nicht kann (FRITZ!Box → 500). Danach wird dauerhaft LIST genutzt.

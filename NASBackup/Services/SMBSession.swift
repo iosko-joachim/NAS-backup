@@ -57,8 +57,14 @@ final class SMBSession: RemoteTransport, @unchecked Sendable {
     /// bereits existierende Verzeichnisse. So können wir später nur die wirklich fehlenden
     /// Ordner anlegen — ohne fehlerträchtige stat-/mkdir-Aufrufe auf existierende Pfade,
     /// die libsmb2 aus dem Tritt bringen würden.
-    func snapshot(basePath: String) async throws -> RemoteSnapshot {
+    func snapshot(basePath: String,
+                  scope: Set<String>,
+                  isCancelled: @escaping @Sendable () -> Bool) async throws -> RemoteSnapshot {
+        // `scope` wird hier bewusst ignoriert: SMB listet serverseitig in EINEM Roundtrip
+        // rekursiv (schnell) und braucht den vollständigen Verzeichnis-Satz, um ein Neu-Anlegen
+        // existierender Ordner zu vermeiden (das würde libsmb2 stören). Siehe ISSUES.md.
         guard let manager else { throw SMBError.notConnected }
+        if isCancelled() { return RemoteSnapshot() }
         let path = Self.normalize(basePath)
         let listingPath = path.isEmpty ? "/" : path
         let entries: [[URLResourceKey: Any]]

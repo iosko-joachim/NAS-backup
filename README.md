@@ -10,12 +10,14 @@ Owlfiles") brach bei großen Mengen (~10 GB / 10.000 Dateien) unzuverlässig ab
 (`Socket Error 32 [Broken pipe]`). NAS Backup macht denselben Job gezielt und robust.
 
 > **Status:** Unterstützt **SMB und FTP** (umschaltbar). SMB end-to-end gegen Standard-Samba
-> verifiziert (922 Dateien, verschachtelte Ordner, Zeitstempel, inkrementelles Überspringen).
-> **Wichtig:** Auf **modernem iOS (≥ 18.7)** blockt das System die **rohen Sockets** von
-> libsmb2 fürs lokale Netz selbst bei erteilter Berechtigung → **SMB scheitert dort**. Der
-> **FTP-Transport läuft über `NWConnection`** (Apple-Privacy-integriert) und **funktioniert auf
-> genau diesen Geräten** — daher ist **FTP an der FRITZ!Box der empfohlene Weg**. Details &
-> Begründung: [ISSUES.md](ISSUES.md). Verteilung über **TestFlight** (aktuell Build 11).
+> verifiziert (922 Dateien, verschachtelte Ordner, Zeitstempel, inkrementelles Überspringen);
+> FTP gegen pyftpdlib **und** an einer FRITZ!Box.
+> **Aktueller Befund (Build 14):** An Stefans FRITZ!Box (iOS 18.7) **verbinden und lesen beide
+> Protokolle** — SMB wie FTP. Beide scheitern aber **identisch am Schreiben** (SMB
+> `STATUS_ACCESS_DENIED`, FTP `553 Permission denied`): Das ist **serverseitig** — der
+> FRITZ!Box-Benutzer braucht **Schreibrecht auf die USB-Platte**. (Die frühere Annahme „SMB
+> ist auf iOS ≥ 18.7 wegen roher Sockets unmöglich" war **falsch** — SMB verbindet dort sauber.)
+> Details: [ISSUES.md](ISSUES.md). Verteilung über **TestFlight** (aktuell Build 14).
 
 ## Funktionen
 

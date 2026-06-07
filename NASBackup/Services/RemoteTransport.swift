@@ -10,8 +10,13 @@ protocol RemoteTransport: AnyObject {
     /// Kurzer Verbindungstest (Connect + Echo/NOOP).
     func test() async throws
 
-    /// Rekursives Listing ab `basePath`: vorhandene Dateien + Verzeichnisse.
-    func snapshot(basePath: String) async throws -> RemoteSnapshot
+    /// Erfasst den Remote-Bestand für den Inkrementell-Abgleich.
+    /// `scope` = die Verzeichnisse, in denen geplante Dateien liegen (deren Eltern). Transporte
+    /// ohne serverseitige Rekursion (FTP) listen NUR diese Ordner statt den ganzen Zielbaum.
+    /// `isCancelled` wird zwischen Teilschritten geprüft, damit ein Abbruch sofort greift.
+    func snapshot(basePath: String,
+                  scope: Set<String>,
+                  isCancelled: @escaping @Sendable () -> Bool) async throws -> RemoteSnapshot
 
     /// Direkte Unterverzeichnisse (eine Ebene) — für den Ziel-Browser.
     func listDirectories(atPath basePath: String) async throws -> [String]

@@ -177,11 +177,20 @@ final class BackupEngine {
             return
         }
         statusMessage = "Vergleiche mit Ziel …"
+        // Nur die Ziel-Ordner erfassen, in denen geplante Dateien landen (deren Eltern) —
+        // nicht den ganzen Bestand. Spart bei FTP tausende Listing-Roundtrips.
+        let scope: Set<String> = Set(planned.map {
+            SMBSession.normalize(($0.remotePath as NSString).deletingLastPathComponent)
+        })
+        let token = cancelToken
         let snapshot: RemoteSnapshot
         do {
-            snapshot = try await session.snapshot(basePath: config.targetSubpath)
+            snapshot = try await session.snapshot(basePath: config.targetSubpath,
+                                                  scope: scope,
+                                                  isCancelled: { token.isCancelled })
         } catch {
             await session.disconnect()
+            if cancelToken.isCancelled { finish(.cancelled, "Abgebrochen."); return }
             finish(.failed, "Ziel konnte nicht gelesen werden: \(error.localizedDescription)")
             return
         }

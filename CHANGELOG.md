@@ -3,7 +3,21 @@
 Alle Builds laufen unter Version **1.0**; die Build-Nummer (`CURRENT_PROJECT_VERSION`)
 wird je TestFlight-Upload hochgezählt. Die frühen Builds waren schnelle TestFlight-Iterationen.
 
-## 1.0 (Build 13) — aktuell
+## 1.0 (Build 14) — aktuell
+
+- **FTP-Snapshot drastisch beschleunigt:** Statt den **kompletten Zielbaum** rekursiv zu
+  listen (bei großem Altbestand tausende `PASV`+`LIST`-Roundtrips → Minuten, Balken bei 0 %),
+  werden jetzt **nur die Ziel-Ordner gelistet, in denen die geplanten Dateien landen** (deren
+  Eltern). Bei „5 Dateien kopieren" sind das 1–3 Listings statt tausende. SMB bleibt unberührt
+  (listet serverseitig in einem Roundtrip).
+- **Sofortiger Abbruch:** Der Snapshot prüft den Abbruch zwischen den Ordnern und bricht
+  unmittelbar ab (vorher lief das Voll-Listing nach „Abbrechen" minutenlang weiter).
+- **Befund SMB vs. FTP (siehe ISSUES.md):** Beide Protokolle **verbinden und lesen** an Stefans
+  FRITZ!Box; beide scheitern **identisch am Schreiben** (SMB `STATUS_ACCESS_DENIED`, FTP `553`).
+  Das ist **serverseitig** (NAS-Schreibrecht des FRITZ!Box-Benutzers), keine App-Sache. Die
+  frühere These „SMB ist auf iOS ≥ 18.7 unmöglich" ist damit **widerlegt** — SMB verbindet sauber.
+
+## 1.0 (Build 13)
 
 - **FTP-Diagnose beim Verbindungstest:** loggt das **Login-Verzeichnis (`PWD`)** und den
   **Inhalt der FTP-Wurzel**. Klärt, dass das FTP-Startverzeichnis sich vom Web-/SMB-Pfad

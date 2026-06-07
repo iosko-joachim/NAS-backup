@@ -48,7 +48,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: de.jomative.nasbackup
         MARKETING_VERSION: "1.0"
-        CURRENT_PROJECT_VERSION: "13"
+        CURRENT_PROJECT_VERSION: "14"
         DEVELOPMENT_TEAM: XV75SD8TB6
         CODE_SIGN_STYLE: Automatic
         SWIFT_VERSION: "5.0"

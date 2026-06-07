@@ -6,38 +6,41 @@ das App-Protokoll (`NASBackup.log` → „Protokoll teilen").
 
 ---
 
-## 🟢 GEKLÄRT: SMB scheitert mit „Operation not permitted" (EPERM) — iOS blockt rohe Sockets
+## 🟢 KORRIGIERT (Build 13/14): SMB verbindet doch — der echte Blocker ist das NAS-Schreibrecht
 
-**Symptom (aus dem Protokoll):**
+**Frühere (falsche) These (Build 9/10):** „Auf iOS ≥ 18.7 blockt das System rohe BSD-Sockets,
+deshalb scheitert libsmb2/SMB grundsätzlich; FTP über NWConnection ist der einzige Weg."
+
+**Was Build 13 (iOS 18.7.8) tatsächlich zeigt — beide Protokolle:**
 ```
-Verbindungstest Pre-Flight: ok — Netzwerkweg frei.        <- NWConnection-Probe gelingt!
-smb2: Read from socket failed, errno:9. Closing socket.    <- libsmb2-Rohsocket
-Verbindungstest FEHLER: NSPOSIXErrorDomain 1 | Error code Operation not permitted:
+SMB:  Verbindungstest OK: 192.168.178.1/FB6490SO   ← SMB verbindet sauber!
+FTP:  Verbindungstest OK + listet FREECOM_HDD/IP13  ← FTP liest den ganzen Baum
 ```
+**SMB ist also NICHT tot.** Owlfiles (ebenfalls SMB) funktioniert auf demselben Gerät — Stefan
+hatte recht. Der EPERM/`errno:9` aus Build 9/10 hatte eine andere Ursache (vermutlich
+Konfig/Share-Pfad, nicht eine generelle iOS-Socket-Sperre) und ist seither nicht reproduziert.
 
-**Beweisführung (Build 9/10, iOS 18.7.8):** Der **Pre-Flight über `NWConnection` ist `ok`** —
-und NWConnection unterliegt **derselben** „Lokales Netzwerk"-Berechtigung. Wäre die Erlaubnis
-nicht erteilt, würde **auch der Pre-Flight** blockiert. Er gelingt aber. **→ Die Berechtigung
-IST erteilt.** Trotzdem bekommt **libsmb2 (rohe BSD-Sockets) EPERM**.
+**Der gemeinsame, echte Blocker = SCHREIBEN, serverseitig.** Beim eigentlichen Kopieren
+scheitern **beide** Protokolle identisch:
+```
+SMB:  smb2: Create failed with status STATUS_ACCESS_DENIED   (nach 60 s)
+FTP:  MKD … ⇐ 550 / STOR … ⇐ 553 Permission denied
+```
+Zwei völlig verschiedene Stacks, **derselbe** Fehler an **derselben** Stelle (erstes Anlegen/
+Schreiben) → die Ursache liegt **nicht in der App**, sondern am NAS: Der FRITZ!Box-Benutzer
+`nasbackup` hat **Lese-, aber kein Schreibrecht** auf die USB-Platte (Lesen/Listen geht auf
+beiden Wegen). Lesen ≠ Schreiben.
 
-**Erkenntnis:** Auf **modernem iOS (≥ 18.7)** erlaubt das System **Network.framework
-(NWConnection)**, blockt aber **rohe BSD-Sockets** fürs lokale Netz — **selbst bei erteilter
-Berechtigung**. Es war also nie Gast/Signing/Schalter/VPN, sondern diese Socket-Einschränkung.
-(Auf älteren iOS-Versionen lief libsmb2 noch — z. B. der 922-Dateien-Test.)
+**Zu klären mit dem Tester:**
+1. Mit **welchem Benutzer** schrieb der frühere Owlfiles-Workflow? Wenn ein anderer (z. B. der
+   FRITZ!Box-Hauptzugang), fehlt `nasbackup` schlicht das Schreibrecht.
+2. In der FRITZ!Box dem Benutzer **„Zugang zu NAS-Inhalten" mit Schreibrecht** auf die externe
+   Platte geben — **oder** testweise die (schreibfähigen) Owlfiles-Zugangsdaten in der App nutzen.
 
-**Lösung: FTP statt SMB.** Der FTP-Transport (`FTPSession`) läuft über **NWConnection** und ist
-damit nicht betroffen — er verbindet und kopiert auf genau dem Gerät, auf dem SMB scheitert
-(in Stefans Tests bestätigt). **SMB via libsmb2 ist auf modernem iOS für lokale Netze faktisch
-eine Sackgasse.**
-
-**Offen/optional:** SMB über NWConnection tunneln (Socket-Handle an libsmb2 übergeben) — großer
-Aufwand, nur falls SMB zwingend nötig wird. Pragmatisch: **FTP nutzen.** Mögliche UX-Politur:
-bei genau dieser SMB-Signatur automatisch „→ bitte auf FTP umschalten" anzeigen; ggf. FTP als
-Standardprotokoll.
-
-> Hinweis: Das frühere „🟡 IN ARBEIT: SMB-Signing"-Thema ist damit **gegenstandslos** — der
-> Abbruch passiert auf Socket-Ebene, lange vor der SMB-Aushandlung. Signing/Dialekt waren nicht
-> die Ursache.
+**Konsequenz für die App:** Kein App-Build behebt ein serverseitiges „Permission denied". SMB
+**und** FTP bleiben beide als Transport; FTP ist nicht mehr „der einzig mögliche", sondern
+gleichwertig. Die UX-Hinweise bei 530/550/552/553 (Build 12) zielen bereits genau auf diese
+Rechte-/Pfad-Ursache.
 
 ---
 
