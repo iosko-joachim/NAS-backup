@@ -23,7 +23,8 @@ struct TransferConfig: Codable, Equatable {
     var targetSubpath: String = ""
     /// SMB-Verschlüsselung erzwingen (manche FRITZ!Box-Firmwares mögen das nicht). — nur SMB.
     var encrypted: Bool = false
-    /// Hängt an jeden kopierten Quell-Ordner ein Datums-Suffix `_JJMMTT` an (wie Stefans manueller Schritt).
+    /// Hängt an jeden kopierten Quell-Ordner ein Datums-/Zeit-Suffix `_JJMMTT_HHMMSS` an
+    /// (eindeutiger Zielordner je Lauf — hilfreich bei häufigen Tests).
     var appendDateSuffix: Bool = false
     /// Strenger Modus: zusätzlich bei NEUERER Quelle kopieren (mtime). Standard aus, weil
     /// FAT/Zeitzonen/DST-Versatz sonst unveränderte Dateien endlos neu kopieren lässt.

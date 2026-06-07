@@ -404,7 +404,7 @@ final class BackupEngine {
         guard enabled else { return "" }
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "yyMMdd"
+        f.dateFormat = "yyMMdd_HHmmss"
         return "_" + f.string(from: Date())
     }
 

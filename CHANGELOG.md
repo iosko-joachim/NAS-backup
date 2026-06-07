@@ -3,7 +3,13 @@
 Alle Builds laufen unter Version **1.0**; die Build-Nummer (`CURRENT_PROJECT_VERSION`)
 wird je TestFlight-Upload hochgezählt. Die frühen Builds waren schnelle TestFlight-Iterationen.
 
-## 1.0 (Build 14) — aktuell
+## 1.0 (Build 15) — aktuell
+
+- **Zielordner-Suffix mit Uhrzeit:** „Datum an Zielordner anhängen" erzeugt jetzt
+  `_JJMMTT_HHMMSS` statt nur `_JJMMTT` → bei häufigen Tests landet jeder Lauf in einem
+  **eindeutigen** Zielordner (auf Stefans Wunsch). Label entsprechend angepasst.
+
+## 1.0 (Build 14)
 
 - **FTP-Snapshot drastisch beschleunigt:** Statt den **kompletten Zielbaum** rekursiv zu
   listen (bei großem Altbestand tausende `PASV`+`LIST`-Roundtrips → Minuten, Balken bei 0 %),
