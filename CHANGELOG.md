@@ -3,7 +3,21 @@
 Alle Builds laufen unter Version **1.0**; die Build-Nummer (`CURRENT_PROJECT_VERSION`)
 wird je TestFlight-Upload hochgezählt. Die frühen Builds waren schnelle TestFlight-Iterationen.
 
-## 1.0 (Build 15) — aktuell
+## 1.0 (Build 16) — aktuell
+
+- **FTP-Schreibfehler (553) behoben.** Ursache war in der App, nicht am Server: Der scoped
+  FTP-Snapshot (Build 14) schloss aus einem erfolgreichen `LIST` auf „Ordner existiert" —
+  die FRITZ!Box liefert auf `LIST <nicht-existent>` aber `150` + leere Liste statt eines
+  Fehlers. Dadurch wurde der Zielordner fälschlich als vorhanden markiert, `MKD` übersprungen
+  und `STOR` lief in einen nie angelegten Ordner → `553 Permission denied`.
+- **Fix:** Bei FTP wird die Ordner-Existenz **nicht** mehr aus `LIST` abgeleitet; der
+  Zielordner wird vor dem Upload **immer per `MKD` (je Ebene, idempotent) angelegt** —
+  exakt die `mkdir`+`put`-Folge, die an der FRITZ!Box nachweislich `257`/`226` liefert.
+  Datei-Größen für den Inkrementell-Abgleich werden weiter gelesen. **SMB unverändert.**
+- Belegt per direktem Test an der FRITZ!Box (Windows-FTP, Benutzer `nasbackup`): Anlegen
+  verschachtelter Ordner und Schreiben in Unterordner (ASCII **und** binär) funktioniert.
+
+## 1.0 (Build 15)
 
 - **Zielordner-Suffix mit Uhrzeit:** „Datum an Zielordner anhängen" erzeugt jetzt
   `_JJMMTT_HHMMSS` statt nur `_JJMMTT` → bei häufigen Tests landet jeder Lauf in einem

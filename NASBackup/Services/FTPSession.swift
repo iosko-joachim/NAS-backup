@@ -95,11 +95,17 @@ final class FTPSession: RemoteTransport, @unchecked Sendable {
                   scope: Set<String>,
                   isCancelled: @escaping @Sendable () -> Bool) async throws -> RemoteSnapshot {
         var snap = RemoteSnapshot()
-        snap.baseExists = true
+        // WICHTIG: Bei FTP NICHT aus einem erfolgreichen LIST auf „Ordner existiert" schließen.
+        // Die FRITZ!Box liefert auf `LIST <nicht-existenter-Ordner>` kein Fehler-Reply, sondern
+        // 150 + leere Liste. Würden wir den Ordner als vorhanden markieren, überspränge
+        // `ensureDirectory` das `MKD` → `STOR` liefe in einen nie angelegten Ordner → 553.
+        // Deshalb: `directories` leer lassen und `baseExists = false` → `ensureDirectory` legt
+        // alle Ebenen idempotent per `MKD` an (existiert → 550, wird ignoriert; neu → 257),
+        // bevor `STOR` läuft. (Server/Platte/User können das nachweislich; getestet.)
+        snap.baseExists = false
         // NUR die Verzeichnisse listen, in denen geplante Dateien liegen (deren Eltern) —
-        // NICHT den kompletten Zielbaum rekursiv. FTP hat kein serverseitiges Rekursiv-List,
-        // jeder Ordner = ein PASV+LIST. Bei großem Zielbestand (tausende Altordner) sank das
-        // damit von Minuten auf Sekunden. Zwischen den Ordnern wird der Abbruch geprüft.
+        // NICHT den kompletten Zielbaum rekursiv. Liefert die Datei-Größen für den
+        // Inkrementell-Abgleich. Zwischen den Ordnern wird der Abbruch geprüft.
         for dir in scope.sorted() {
             if isCancelled() { throw FTPError.cancelled }
             let entries: [MLSDEntry]
@@ -109,7 +115,6 @@ final class FTPSession: RemoteTransport, @unchecked Sendable {
                 // Ordner existiert (noch) nicht → dort gibt es nichts zu vergleichen.
                 continue
             }
-            snap.directories.insert(dir)
             for e in entries where !e.isDir {
                 let full = dir.isEmpty ? e.name : dir + "/" + e.name
                 snap.files[full] = RemoteEntry(size: e.size, modificationDate: e.modify)

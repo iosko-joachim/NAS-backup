@@ -53,6 +53,16 @@ FTP ist auf modernem iOS der **zuverlässige** Transport. FRITZ!Box-spezifische 
   Leerzeichen) → Snapshot, Inkrementell-Abgleich und NAS-Browser funktionieren.
 - **Kein MFMT:** `MFMT` (mtime setzen) → `500`. Ab Build 11 nach dem ersten 5xx dauerhaft
   abgeschaltet. Unkritisch, da Vergleich über die **Größe** läuft.
+- **🟢 GELÖST (Build 16): `553 Permission denied` beim Schreiben in Unterordner.** War **kein**
+  Server-/Rechte-/Read-only-Problem (alle widerlegt). Direkter Test an der echten FRITZ!Box
+  (Windows-`ftp`, Benutzer `nasbackup`): `mkdir FREECOM_HDD/nbtest/sub` → `257`, `put` in den
+  Unterordner ASCII **und** binär → `226`. **Ursache lag in der App:** Der scoped FTP-Snapshot
+  (Build 14) schloss aus einem erfolgreichen `LIST` auf „Ordner existiert" — die FRITZ!Box
+  liefert auf `LIST <nicht-existent>` aber `150` + leere Liste (kein Fehler). → Zielordner
+  fälschlich als vorhanden markiert → `ensureDirectory` überspringt `MKD` → `STOR` in nie
+  angelegten Ordner → `553`. **Fix:** Bei FTP die Existenz **nicht** aus `LIST` ableiten
+  (`directories` leer, `baseExists=false`) → Zielordner wird vor dem Upload **immer** per
+  `MKD` (je Ebene, idempotent) angelegt. Bildet die bewiesene `mkdir`+`put`-Folge nach.
 - **Pfadstruktur / „kein Share-Feld" bei FTP:** FRITZ!Box-Pfad ist
   `IP / Share (FB6490SO) / Ordner (FREECOM_HDD) / …`. Bei FTP gibt es **kein Share-Feld** — der
   **komplette Pfad ab FTP-Wurzel** gehört in den **Zielordner**. **Kein `chdir` nötig:** die
