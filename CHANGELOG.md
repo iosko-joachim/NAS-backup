@@ -3,7 +3,17 @@
 Alle Builds laufen unter Version **1.0**; die Build-Nummer (`CURRENT_PROJECT_VERSION`)
 wird je TestFlight-Upload hochgezählt. Die frühen Builds waren schnelle TestFlight-Iterationen.
 
-## 1.0 (Build 11) — aktuell
+## 1.0 (Build 12) — aktuell
+
+- **Schnellabbruch bei dauerhaften FTP-Fehlern (5xx):** „Permission denied" (550/553) o. ä.
+  werden NICHT mehr 4× mit Reconnect wiederholt — sofortiger, klarer Fehler statt Log-Spam.
+- **Klartext-Hinweis bei „Permission denied":** Zielordner liegt vermutlich nicht auf der
+  USB-Platte (sondern im internen FRITZ!Box-Speicher) **oder** der Benutzer hat keine
+  NAS-Schreibrechte → Hinweis, per „Auf dem NAS auswählen" die Platte zu wählen + Rechte prüfen.
+- **FTP-Hinweis in der UI:** Zielordner = voller Pfad ab FTP-Wurzel (z. B. `FREECOM_HDD/IP13`),
+  am besten per Browser wählen; FRITZ!Box-Benutzer braucht NAS-Schreibrechte.
+
+## 1.0 (Build 11)
 
 - **FTP: LIST-Fallback**, wenn der Server kein **MLSD** kann (FRITZ!Box → 500). Damit
   funktionieren Snapshot/Inkrementell-Abgleich **und** der NAS-Browser auch an der FRITZ!Box.

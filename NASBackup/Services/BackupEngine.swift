@@ -56,6 +56,28 @@ final class BackupEngine {
     private let maxAttempts = 4
     private var strictTimeCheck = false
     private var timeAnomalyCount = 0
+    private var writeDeniedHintShown = false
+
+    /// Dauerhafte Fehler (FTP 5xx) — Wiederholen sinnlos.
+    static func isPermanent(_ error: Error) -> Bool {
+        if let ftp = error as? FTPError, case let .unexpectedReply(code, _) = ftp {
+            return (500..<600).contains(code)
+        }
+        return false
+    }
+
+    private func maybeShowWriteDeniedHint(_ error: Error) {
+        guard !writeDeniedHintShown,
+              let ftp = error as? FTPError, case let .unexpectedReply(code, _) = ftp,
+              [530, 550, 552, 553].contains(code) else { return }
+        writeDeniedHintShown = true
+        let hint = "Schreiben verweigert (\(code)). Der Zielordner liegt vermutlich NICHT auf der "
+            + "USB-Platte (sondern im internen FRITZ!Box-Speicher) ODER der FRITZ!Box-Benutzer hat "
+            + "dort keine Schreibrechte. → Per „Auf dem NAS auswählen“ in die USB-Platte "
+            + "(z. B. FREECOM_HDD) navigieren und die NAS-Schreibrechte des Benutzers prüfen."
+        Log.write("Hinweis: \(hint)")
+        statusMessage = hint
+    }
 
     // MARK: - Steuerung
 
@@ -88,6 +110,7 @@ final class BackupEngine {
         currentFileName = ""; currentFileSize = 0; currentFileBytes = 0
         errors = []
         timeAnomalyCount = 0
+        writeDeniedHintShown = false
     }
 
     // MARK: - Hauptablauf
@@ -275,6 +298,12 @@ final class BackupEngine {
             } catch {
                 if token.isCancelled { return .cancelled }
                 lastError = error.localizedDescription
+                // Dauerhafte Fehler (z. B. FTP 5xx „Permission denied"/„No such file") nicht
+                // wiederholen — Reconnect/Retry hilft nicht und produziert nur Lärm.
+                if Self.isPermanent(error) {
+                    maybeShowWriteDeniedHint(error)
+                    return .failure(lastError)
+                }
                 if attempt < maxAttempts {
                     statusMessage = "Fehler bei \(file.remotePath) – neuer Versuch (\(attempt)/\(maxAttempts - 1)) …"
                     // Verbindung neu aufbauen. Den Verzeichnis-Cache NICHT verwerfen — die

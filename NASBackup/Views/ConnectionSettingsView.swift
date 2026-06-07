@@ -10,7 +10,7 @@ struct ConnectionSettingsView: View {
 
     var body: some View {
         Form {
-            Section("NAS") {
+            Section {
                 Picker("Protokoll", selection: $settings.config.proto) {
                     ForEach(TransferProtocol.allCases) { p in Text(p.label).tag(p) }
                 }
@@ -35,6 +35,12 @@ struct ConnectionSettingsView: View {
                     Label("Auf dem NAS auswählen …", systemImage: "folder.badge.gearshape")
                 }
                 .disabled(!settings.config.isComplete)
+            } header: {
+                Text("NAS")
+            } footer: {
+                if settings.config.proto == .ftp {
+                    Text("FTP hat kein „Freigabe“-Feld. Der Zielordner ist der VOLLE Pfad ab dem FTP-Wurzelverzeichnis (z. B. FREECOM_HDD/IP13). Am besten „Auf dem NAS auswählen“ und bis zur USB-Platte navigieren. Der FRITZ!Box-Benutzer braucht Schreibrechte auf dem NAS.")
+                }
             }
 
             Section("Anmeldung") {
