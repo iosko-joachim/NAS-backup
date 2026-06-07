@@ -3,7 +3,14 @@
 Alle Builds laufen unter Version **1.0**; die Build-Nummer (`CURRENT_PROJECT_VERSION`)
 wird je TestFlight-Upload hochgezählt. Die frühen Builds waren schnelle TestFlight-Iterationen.
 
-## 1.0 (Build 12) — aktuell
+## 1.0 (Build 13) — aktuell
+
+- **FTP-Diagnose beim Verbindungstest:** loggt das **Login-Verzeichnis (`PWD`)** und den
+  **Inhalt der FTP-Wurzel**. Klärt, dass das FTP-Startverzeichnis sich vom Web-/SMB-Pfad
+  unterscheiden kann, und zeigt, **ob die USB-Platte (z. B. `FREECOM_HDD`) im FTP-Baum
+  auftaucht** — damit der richtige Zielpfad ohne Raten gefunden wird.
+
+## 1.0 (Build 12)
 
 - **Schnellabbruch bei dauerhaften FTP-Fehlern (5xx):** „Permission denied" (550/553) o. ä.
   werden NICHT mehr 4× mit Reconnect wiederholt — sofortiger, klarer Fehler statt Log-Spam.

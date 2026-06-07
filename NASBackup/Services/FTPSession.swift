@@ -72,6 +72,15 @@ final class FTPSession: RemoteTransport, @unchecked Sendable {
     func test() async throws {
         try await connect()
         _ = try await command("NOOP")
+        // Diagnose: Wo startet FTP wirklich (kann sich vom Web-/SMB-Pfad unterscheiden!),
+        // und was liegt an der FTP-Wurzel? Beantwortet „taucht die USB-Platte hier auf?".
+        if let pwd = try? await command("PWD") {
+            Log.write("ftp: Login-Verzeichnis (PWD) ⇐ \(pwd.text)")
+        }
+        if let root = try? await listing(path: "") {
+            let names = root.map { $0.isDir ? "[\($0.name)]" : $0.name }
+            Log.write("ftp: Inhalt der FTP-Wurzel: \(names.isEmpty ? "(leer)" : names.joined(separator: ", "))")
+        }
     }
 
     func disconnect() async {
