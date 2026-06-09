@@ -51,8 +51,16 @@ FTP ist auf modernem iOS der **zuverlässige** Transport. FRITZ!Box-spezifische 
 - **Kein MLSD:** FRITZ!Box-FTP beantwortet `MLSD` mit `500`. Ab **Build 11** schaltet die App
   automatisch auf **`LIST`** um (Unix-`ls -l`-Parser, liest Größe/Typ inkl. Namen mit
   Leerzeichen) → Snapshot, Inkrementell-Abgleich und NAS-Browser funktionieren.
-- **Kein MFMT:** `MFMT` (mtime setzen) → `500`. Ab Build 11 nach dem ersten 5xx dauerhaft
-  abgeschaltet. Unkritisch, da Vergleich über die **Größe** läuft.
+- **Kein Datum-Setzen über FTP (Zieldateien tragen die Upload-Zeit).** `MFMT` (mtime setzen)
+  → `500`. Ab Build 11 nach dem ersten 5xx dauerhaft abgeschaltet. **Gemessen (FEAT, 2026-06):**
+  die FRITZ!Box listet nur `UTF8, MDTM, SIZE, AUTH TLS, PBSZ, PROT` — **kein `MFMT`**; und die
+  Setz-Form `MDTM <YYYYMMDDHHMMSS> <pfad>` wird **abgelehnt** (das gelistete `MDTM` ist nur die
+  Lese-Form). ⇒ **Über FTP ist an der FRITZ!Box kein Datum setzbar — keine App-Änderung kann das
+  umgehen.** Funktional unkritisch: Inkrementell-Abgleich läuft über die **Größe**, nicht die
+  mtime. Echter Datumserhalt nur über **SMB** (`SetInfo`/`setAttributes`; an der FRITZ!Box
+  ungetestet) — separater Weg (Share-Fix + Teardown-Crash-Härtung nötig).
+  - *Nebenbefund:* `FEAT` zeigt `AUTH TLS / PBSZ / PROT` → die FRITZ!Box kann **FTPS** (explizites
+    TLS). Relevant für den derzeit blockierten `ftps`-Schalter — eigenes Thema.
 - **🟢 GELÖST (Build 16): `553 Permission denied` beim Schreiben in Unterordner.** War **kein**
   Server-/Rechte-/Read-only-Problem (alle widerlegt). Direkter Test an der echten FRITZ!Box
   (Windows-`ftp`, Benutzer `nasbackup`): `mkdir FREECOM_HDD/nbtest/sub` → `257`, `put` in den

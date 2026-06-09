@@ -3,7 +3,22 @@
 Alle Builds laufen unter Version **1.0**; die Build-Nummer (`CURRENT_PROJECT_VERSION`)
 wird je TestFlight-Upload hochgezählt. Die frühen Builds waren schnelle TestFlight-Iterationen.
 
-## 1.0 (Build 16) — aktuell
+## 1.0 (Build 17) — aktuell
+
+- **SMB-Diagnose (Primitiv-Tests):** Neuer Bildschirm (Verbindung → SMB-Optionen →
+  „SMB-Diagnose …“) mit **9 nummerierten Buttons**, die je **eine** SMB-Operation isoliert
+  gegen das NAS ausführen und ausführlich ins Protokoll loggen — plus „Alle 1–9 nacheinander“.
+  Zweck: sehen, **welche** Operation an der FRITZ!Box scheitert (und unter welcher Freigabe).
+  Zuordnung: 1 Verbinden (konfig. Freigabe) · 2 Verbinden „FREECOM_HDD“ · 3 Wurzel auflisten ·
+  4 Zielpfad lesen · 5 Ordner anlegen · 6 Datei schreiben · 7 Anlegen+Schreiben über
+  „FREECOM_HDD“ (Schlüsseltest) · 8 In Freigabe-Wurzel schreiben · 9 Änderungsdatum setzen.
+- **Mehr SMB-Logging:** `connect`/`MKD`/`STOR`/`SetInfo` protokollieren jetzt Operation +
+  Ergebnis bzw. Fehler (Domain/Code/Status/Underlying) — auch im normalen Backup-Lauf.
+- **Crash-Härtung (Teardown):** `connect()` schließt einen alten SMB-Manager sauber, bevor ein
+  neuer entsteht (kein verwaister `deinit→disconnect`). Verhindert NICHT das Schreibproblem,
+  hält aber die Diagnose stabil.
+
+## 1.0 (Build 16)
 
 - **FTP-Schreibfehler (553) behoben.** Ursache war in der App, nicht am Server: Der scoped
   FTP-Snapshot (Build 14) schloss aus einem erfolgreichen `LIST` auf „Ordner existiert" —

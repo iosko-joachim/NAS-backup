@@ -36,10 +36,38 @@ final class SMBSession: RemoteTransport, @unchecked Sendable {
     func connect() async throws {
         guard let url = URL(string: "smb://\(config.host)") else { throw SMBError.invalidServerURL }
         let user = config.username.isEmpty ? "guest" : config.username
+        // Alten Manager sauber schließen, bevor ein neuer entsteht — vermeidet einen
+        // verwaisten deinit→disconnect, der libsmb2 beim Teardown stören kann (Crash-Härtung;
+        // behebt NICHT das eigentliche Schreibproblem, hält aber die Diagnose stabil).
+        if manager != nil { await disconnect() }
         let credential = URLCredential(user: user, password: password, persistence: .forSession)
         guard let mgr = SMB2Manager(url: url, credential: credential) else { throw SMBError.managerInit }
-        try await mgr.connectShare(name: config.share, encrypted: config.encrypted)
+        Log.write("smb: connectShare '\(config.share)' als '\(user)' (verschlüsselt=\(config.encrypted)) …")
+        do {
+            try await mgr.connectShare(name: config.share, encrypted: config.encrypted)
+        } catch {
+            Log.write("smb: connectShare '\(config.share)' FEHLER — \(Self.describe(error))")
+            throw error
+        }
         self.manager = mgr
+        Log.write("smb: verbunden mit Freigabe '\(config.share)'")
+    }
+
+    /// Kompakte Fehlerbeschreibung (Domain/Code/Text + Underlying) fürs Protokoll.
+    static func describe(_ error: Error) -> String {
+        let ns = error as NSError
+        var parts = ["\(ns.domain) \(ns.code)", ns.localizedDescription]
+        if let u = ns.userInfo[NSUnderlyingErrorKey] as? NSError {
+            parts.append("↳ \(u.domain) \(u.code): \(u.localizedDescription)")
+        }
+        return parts.joined(separator: " | ")
+    }
+
+    /// Einzelnes `createDirectory` OHNE Reconnect — für die SMB-Diagnose-Primitive
+    /// (kein Churn der Verbindung, damit ein Fehler klar sichtbar wird statt Reconnect-Lärm).
+    func createDirectoryOnce(_ path: String) async throws {
+        guard let m = manager else { throw SMBError.notConnected }
+        try await m.createDirectory(atPath: Self.normalize(path))
     }
 
     func disconnect() async {
@@ -131,9 +159,11 @@ final class SMBSession: RemoteTransport, @unchecked Sendable {
             do {
                 guard let m = manager else { throw SMBError.notConnected }
                 try await m.createDirectory(atPath: current)
+                Log.write("smb: MKD '\(current)' ok")
             } catch {
                 // Sollte wider Erwarten doch eine Kollision/ein Fehler auftreten, kann die
                 // Verbindung gestört sein -> neu verbinden, damit Folgeoperationen klappen.
+                Log.write("smb: MKD '\(current)' — \(Self.describe(error)) (existiert evtl.; reconnect)")
                 try? await connect()
             }
             created.insert(current)
@@ -148,16 +178,31 @@ final class SMBSession: RemoteTransport, @unchecked Sendable {
         onProgress: @escaping @Sendable (_ bytes: Int64) -> Bool
     ) async throws {
         guard let manager else { throw SMBError.notConnected }
-        try await manager.uploadItem(at: localURL, toPath: Self.normalize(remotePath), progress: onProgress)
+        let p = Self.normalize(remotePath)
+        Log.write("smb: STOR '\(p)' …")
+        do {
+            try await manager.uploadItem(at: localURL, toPath: p, progress: onProgress)
+            Log.write("smb: STOR '\(p)' ok")
+        } catch {
+            Log.write("smb: STOR '\(p)' FEHLER — \(Self.describe(error))")
+            throw error
+        }
     }
 
     /// Setzt die Änderungszeit am Ziel, damit der Inkrementell-Abgleich über Läufe stabil bleibt.
     func setModificationDate(_ date: Date, at remotePath: String) async throws {
         guard let manager else { throw SMBError.notConnected }
-        try await manager.setAttributes(
-            attributes: [.contentModificationDateKey: date],
-            ofItemAtPath: Self.normalize(remotePath)
-        )
+        let p = Self.normalize(remotePath)
+        do {
+            try await manager.setAttributes(
+                attributes: [.contentModificationDateKey: date],
+                ofItemAtPath: p
+            )
+            Log.write("smb: SetInfo mtime '\(p)' ok")
+        } catch {
+            Log.write("smb: SetInfo mtime '\(p)' FEHLER — \(Self.describe(error))")
+            throw error
+        }
     }
 
     /// Normalisiert Pfade: Forward-Slashes, kein führender/abschließender Slash.

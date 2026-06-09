@@ -7,6 +7,7 @@ struct ConnectionSettingsView: View {
     @State private var testResult: String?
     @State private var testOK = false
     @State private var showFolderPicker = false
+    @State private var showDiagnostics = false
 
     var body: some View {
         Form {
@@ -54,6 +55,12 @@ struct ConnectionSettingsView: View {
             Section("Optionen") {
                 if settings.config.proto == .smb {
                     Toggle("SMB-Verschlüsselung erzwingen", isOn: $settings.config.encrypted)
+                    Button {
+                        showDiagnostics = true
+                    } label: {
+                        Label("SMB-Diagnose (Primitiv-Tests) …", systemImage: "stethoscope")
+                    }
+                    .disabled(!settings.config.isComplete)
                 } else {
                     Toggle("Passiv-Modus (empfohlen)", isOn: $settings.config.ftpPassive)
                     Toggle("FTPS / TLS (experimentell)", isOn: $settings.config.ftps)
@@ -90,6 +97,9 @@ struct ConnectionSettingsView: View {
                 password: settings.password,
                 selectedPath: $settings.config.targetSubpath
             )
+        }
+        .sheet(isPresented: $showDiagnostics) {
+            SMBDiagnosticsView(config: settings.config, password: settings.password)
         }
     }
 
