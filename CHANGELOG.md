@@ -3,7 +3,22 @@
 Alle Builds laufen unter Version **1.0**; die Build-Nummer (`CURRENT_PROJECT_VERSION`)
 wird je TestFlight-Upload hochgezählt. Die frühen Builds waren schnelle TestFlight-Iterationen.
 
-## 1.0 (Build 18) — aktuell
+## 1.0 (Build 20) — aktuell
+
+- **🟢 SMB-Schreiben/Lesen gefixt — libsmb2-Signing-Bug behoben.** Das hartnäckige
+  `STATUS_ACCESS_DENIED` (FRITZ!Box **und** lokaler FRITZ.NAS-Samba-Repro) war **kein
+  NAS-Rechteproblem**: libsmb2 setzt sein Signier-Flag `smb2->sign` nur, wenn der Server „signing
+  **required**" meldet (`libsmb2.c:926`); Standard-Samba/FRITZ!Box melden nur „enabled" →
+  CREATE/opendir gingen unter SMB 3.1.1 **unsigniert** raus (nur der Tree-Connect wurde per
+  Sonderfall signiert, daher „verbunden") → Server verwirft sie als „Bad signature". **Fix:**
+  Signing in `AMSMB2.initClient` explizit erzwingen — `client.signing = !encrypted`
+  (neuer Setter in `Context.swift` → `smb2_set_sign(ctx, 1)`). Verifiziert: SMB-Primitiv-Tests
+  1–9 grün, echter Backup-Lauf positiv. Nachweis via Samba-Server-Log (`log level = 3`).
+- *Verworfen:* Dialekt-Pinning (`smb2_set_version` 2.1/3.0.2) — lässt den Server die Verbindung
+  fallen (`errno:9`, fälschlich als EPERM gemeldet). Default/Wildcard (3.1.1) + Signing-Flag ist
+  der Weg. Doku (README/ISSUES) entsprechend korrigiert.
+
+## 1.0 (Build 18)
 
 - **Beweis-Funktion „iOS-Schreibtest in Dateien-Ordner" (System-SMB):** Verbindung →
   unten „iOS-Schreibtest in Dateien-Ordner …" → Ordner-Picker. Schreibt über iOS’ **eigenen**

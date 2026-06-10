@@ -6,41 +6,44 @@ das App-Protokoll (`NASBackup.log` → „Protokoll teilen").
 
 ---
 
-## 🟢 KORRIGIERT (Build 13/14): SMB verbindet doch — der echte Blocker ist das NAS-Schreibrecht
+## 🟢 GELÖST (Build 20): SMB-`STATUS_ACCESS_DENIED` war ein libsmb2-Signing-Bug — NICHT das NAS-Recht
 
-**Frühere (falsche) These (Build 9/10):** „Auf iOS ≥ 18.7 blockt das System rohe BSD-Sockets,
-deshalb scheitert libsmb2/SMB grundsätzlich; FTP über NWConnection ist der einzige Weg."
+**Frühere (falsche) These (Build 13/14):** „Beide Protokolle scheitern beim Schreiben → der
+FRITZ!Box-Benutzer `nasbackup` hat kein **Schreibrecht** auf die USB-Platte (serverseitig)."
+Das war **falsch**. Stefan gab dem Benutzer testweise **alle Rechte** → keine Besserung; das war
+der erste Hinweis. (Das FTP-`553` war zudem ein separater App-Bug, siehe Build 16 unten.)
 
-**Was Build 13 (iOS 18.7.8) tatsächlich zeigt — beide Protokolle:**
+**Lokaler Repro + Beweis (2026-06-11):** Gegen einen Debian-Samba als FRITZ.NAS-Simulation
+(`192.168.0.15`, Freigabe `FREECOM_HDD`, `force user`, `guest ok`) zeigte sich **exakt** das
+FRITZ!Box-Muster: connect ✓, aber **jede** Operation — sogar **opendir/Lesen** der Wurzel —
+`Opendir/Create failed (0xc0000022) STATUS_ACCESS_DENIED`. Gegenproben auf **demselben** Server:
+**macOS (Apple-SMB)** und sogar **Gast** dürfen alles (lesen **und** schreiben). → Die Rechte
+sind in Ordnung; abgewiesen wird **nur unser libsmb2**.
+
+**Server-Log (`log level = 3`) nennt die Ursache eindeutig:**
 ```
-SMB:  Verbindungstest OK: 192.168.178.1/FB6490SO   ← SMB verbindet sauber!
-FTP:  Verbindungstest OK + listet FREECOM_HDD/IP13  ← FTP liest den ganzen Baum
+libcli/smb/smb2_signing.c: Bad SMB2 (sign_algo_id=1) signature for message
+  [Signatur im Paket vom iPhone] 00 00 00 00 00 00 00 00 …   ← NULL = unsigniert!
 ```
-**SMB ist also NICHT tot.** Owlfiles (ebenfalls SMB) funktioniert auf demselben Gerät — Stefan
-hatte recht. Der EPERM/`errno:9` aus Build 9/10 hatte eine andere Ursache (vermutlich
-Konfig/Share-Pfad, nicht eine generelle iOS-Socket-Sperre) und ist seither nicht reproduziert.
 
-**Der gemeinsame, echte Blocker = SCHREIBEN, serverseitig.** Beim eigentlichen Kopieren
-scheitern **beide** Protokolle identisch:
-```
-SMB:  smb2: Create failed with status STATUS_ACCESS_DENIED   (nach 60 s)
-FTP:  MKD … ⇐ 550 / STOR … ⇐ 553 Permission denied
-```
-Zwei völlig verschiedene Stacks, **derselbe** Fehler an **derselben** Stelle (erstes Anlegen/
-Schreiben) → die Ursache liegt **nicht in der App**, sondern am NAS: Der FRITZ!Box-Benutzer
-`nasbackup` hat **Lese-, aber kein Schreibrecht** auf die USB-Platte (Lesen/Listen geht auf
-beiden Wegen). Lesen ≠ Schreiben.
+**Root Cause (libsmb2-Bug):** libsmb2 setzt sein echtes Signier-Flag `smb2->sign` nur, wenn der
+**Server** in der Negotiate-Antwort „signing **required**" meldet (`libsmb2.c:926`). Standalone-
+Samba (und offenbar die FRITZ!Box) melden aber nur „**enabled**" → `smb2->sign = 0`. Unter
+SMB 3.1.1 signiert libsmb2 dann per Sonderfall (`pdu.c:701`) **nur den Tree-Connect** (daher
+„verbunden"), schickt aber **CREATE/opendir UNSIGNIERT** raus. Da die Session — durch unser
+client-seitiges `securityMode=[.required]` — als signaturpflichtig gilt, **verwirft der Server
+jedes unsignierte PDU**; das kommt als `STATUS_ACCESS_DENIED` zurück.
 
-**Zu klären mit dem Tester:**
-1. Mit **welchem Benutzer** schrieb der frühere Owlfiles-Workflow? Wenn ein anderer (z. B. der
-   FRITZ!Box-Hauptzugang), fehlt `nasbackup` schlicht das Schreibrecht.
-2. In der FRITZ!Box dem Benutzer **„Zugang zu NAS-Inhalten" mit Schreibrecht** auf die externe
-   Platte geben — **oder** testweise die (schreibfähigen) Owlfiles-Zugangsdaten in der App nutzen.
+**Fix (Build 20):** In `Vendor/AMSMB2/AMSMB2/AMSMB2.swift` (`initClient`) das Signing **explizit
+erzwingen** statt es libsmb2 zu überlassen: `client.signing = !encrypted` (neuer Setter in
+`Context.swift` → `smb2_set_sign(ctx, 1)`) → **alle** PDUs werden signiert. Ergebnis: SMB-
+Primitiv-Tests 1–9 grün (opendir/mkdir/write/mtime), echter Backup-Lauf positiv.
 
-**Konsequenz für die App:** Kein App-Build behebt ein serverseitiges „Permission denied". SMB
-**und** FTP bleiben beide als Transport; FTP ist nicht mehr „der einzig mögliche", sondern
-gleichwertig. Die UX-Hinweise bei 530/550/552/553 (Build 12) zielen bereits genau auf diese
-Rechte-/Pfad-Ursache.
+**Sackgasse dokumentiert:** Den Dialekt fest zu pinnen (`smb2_set_version` auf 2.1 oder 3.0.2)
+ist **kein** Weg — dieser Samba lässt die Verbindung dann fallen (`Read from socket failed,
+errno:9`), was AMSMB2 irreführend als „Operation not permitted (EPERM)" meldet. **Nicht** mit dem
+iOS-Local-Network-EPERM verwechseln. Default/Wildcard (→ SMB 3.1.1) verbinden; der Hebel ist das
+**Signing-Flag**, nicht der Dialekt.
 
 ---
 
@@ -206,9 +209,10 @@ Der aktuelle Blocker (iOS-Local-Network-EPERM) trifft **jede** LAN-Verbindung �
 | Meldung im Log | Bedeutung |
 |---|---|
 | `No route to host (65)` | Falsches Netz/WLAN — iPhone nicht im NAS-Subnetz |
-| `Operation not permitted (1)` / `Permission denied (13)` / `Read from socket failed, errno:9` | iOS blockt den Socket → Lokales-Netzwerk-Berechtigung / VPN / Sperrmodus / Filter |
+| `Operation not permitted (1)` / `Read from socket failed, errno:9` | iOS-Local-Network blockt rohe Sockets (Berechtigung/VPN/Sperrmodus) — **ODER** (wenn direkt nach Dialekt-Pinning) der Server hat die Verbindung fallengelassen |
+| `Permission denied (13)` / `… STATUS_ACCESS_DENIED` (opendir/Create) | SMB-Operation abgelehnt — bis Build 19 der **libsmb2-Signing-Bug** (unsignierte PDUs, in Build 20 gefixt: `client.signing=true`); sonst echtes fehlendes NAS-Recht |
 | `Session setup failed with (0x…)` | SMB-Anmeldung fehlgeschlagen — Benutzer/Passwort/NAS-Berechtigung |
-| `Signing required by server` | Server verlangt SMB-Signing |
+| `Bad SMB2 signature` (Server-Log) | Client signiert PDUs nicht/falsch — genau der Build-≤19-Signing-Bug (Fix Build 20) |
 | `… bad network name …` | Falscher Freigabename (Tree-Connect) |
 | `Verbindung erfolgreich` | 🎉 |
 

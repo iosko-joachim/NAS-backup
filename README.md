@@ -9,15 +9,16 @@ Entstanden aus einer konkreten Anforderung: Der bisherige Workflow (Files → �
 Owlfiles") brach bei großen Mengen (~10 GB / 10.000 Dateien) unzuverlässig ab
 (`Socket Error 32 [Broken pipe]`). NAS Backup macht denselben Job gezielt und robust.
 
-> **Status:** Unterstützt **SMB und FTP** (umschaltbar). SMB end-to-end gegen Standard-Samba
-> verifiziert (922 Dateien, verschachtelte Ordner, Zeitstempel, inkrementelles Überspringen);
+> **Status:** Unterstützt **SMB und FTP** (umschaltbar). SMB end-to-end verifiziert (Standard-Samba
+> 922 Dateien; lokaler FRITZ.NAS-Repro: opendir/mkdir/write/mtime, echter Backup-Lauf);
 > FTP gegen pyftpdlib **und** an einer FRITZ!Box.
-> **Aktueller Befund (Build 14):** An Stefans FRITZ!Box (iOS 18.7) **verbinden und lesen beide
-> Protokolle** — SMB wie FTP. Beide scheitern aber **identisch am Schreiben** (SMB
-> `STATUS_ACCESS_DENIED`, FTP `553 Permission denied`): Das ist **serverseitig** — der
-> FRITZ!Box-Benutzer braucht **Schreibrecht auf die USB-Platte**. (Die frühere Annahme „SMB
-> ist auf iOS ≥ 18.7 wegen roher Sockets unmöglich" war **falsch** — SMB verbindet dort sauber.)
-> Details: [ISSUES.md](ISSUES.md). Verteilung über **TestFlight** (aktuell Build 18).
+> **🟢 Gelöst (Build 20):** Das hartnäckige SMB-`STATUS_ACCESS_DENIED` (an Stefans FRITZ!Box und
+> im lokalen Repro) war **kein NAS-Rechteproblem, sondern ein libsmb2-Signing-Bug**: libsmb2
+> schickte unter SMB 3.1.1 die CREATE/opendir-PDUs **unsigniert**, sobald der Server Signing nur
+> „enabled" (statt „required") meldet → Server verwirft sie. Fix: Signing client-seitig explizit
+> erzwingen (`smb2_set_sign(1)`). Damit lesen **und** schreiben über SMB. (Frühere Annahmen „SMB
+> auf iOS unmöglich" bzw. „Schreibrecht fehlt serverseitig" sind **widerlegt**.)
+> Details: [ISSUES.md](ISSUES.md). Verteilung über **TestFlight** (aktuell Build 20).
 
 ## Funktionen
 

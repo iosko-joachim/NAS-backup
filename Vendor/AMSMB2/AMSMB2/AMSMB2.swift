@@ -1429,6 +1429,12 @@ extension SMB2Manager {
     private func initClient(_ client: SMB2Client, encrypted: Bool) {
         // FRITZ!Box & gehärtete Server verlangen oft SMB-Signing -> required statt nur enabled.
         client.securityMode = [.required]
+        // libsmb2-Bug: Es setzt das echte Signier-Flag smb2->sign nur, wenn der SERVER
+        // "signing required" meldet (libsmb2.c:926). Samba (standalone) meldet nur "enabled"
+        // -> sign bleibt 0 -> unter SMB 3.1.1 wird nur Tree-Connect signiert (Sonderfall in
+        // pdu.c:701), CREATE/opendir gehen UNSIGNIERT raus -> Server verwirft sie als
+        // "Bad signature" -> STATUS_ACCESS_DENIED. Daher Signing hier explizit erzwingen.
+        client.signing = !encrypted
         client.authentication = .ntlmSsp
         client.seal = encrypted
 

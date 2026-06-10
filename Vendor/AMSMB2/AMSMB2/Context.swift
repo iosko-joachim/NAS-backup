@@ -160,6 +160,17 @@ extension SMB2Client {
         }
     }
 
+    var signing: Bool {
+        get {
+            context?.pointee.sign ?? 0 != 0
+        }
+        set {
+            try? withThreadSafeContext { context in
+                smb2_set_sign(context, newValue ? 1 : 0)
+            }
+        }
+    }
+
     var seal: Bool {
         get {
             context?.pointee.seal ?? 0 != 0
@@ -199,7 +210,12 @@ extension SMB2Client {
     }
 
     var version: Version {
-        (try? smb2_get_dialect(context.unwrap())).map { Version(rawValue: UInt32($0)) } ?? .any
+        get {
+            (try? smb2_get_dialect(context.unwrap())).map { Version(rawValue: UInt32($0)) } ?? .any
+        }
+        set {
+            smb2_set_version(context, newValue)
+        }
     }
     
     var passthrough: Bool {
