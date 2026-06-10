@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct ConnectionSettingsView: View {
     @Bindable var settings: SettingsStore
@@ -8,6 +9,9 @@ struct ConnectionSettingsView: View {
     @State private var testOK = false
     @State private var showFolderPicker = false
     @State private var showDiagnostics = false
+    @State private var showSysImporter = false
+    @State private var sysResult: String?
+    @State private var sysOK = false
 
     var body: some View {
         Form {
@@ -88,9 +92,30 @@ struct ConnectionSettingsView: View {
             } footer: {
                 Text("Beim ersten Verbindungsversuch fragt iOS nach der Berechtigung für das lokale Netzwerk – bitte erlauben.")
             }
+
+            Section {
+                Button {
+                    sysResult = nil
+                    showSysImporter = true
+                } label: {
+                    Label("iOS-Schreibtest in Dateien-Ordner …", systemImage: "externaldrive.badge.plus")
+                }
+                if let sysResult {
+                    Label(sysResult, systemImage: sysOK ? "checkmark.circle.fill" : "xmark.octagon.fill")
+                        .foregroundStyle(sysOK ? .green : .red)
+                        .font(.footnote)
+                }
+            } header: {
+                Text("Beweis: System-SMB über die Dateien-App")
+            } footer: {
+                Text("Vorher in der Dateien-App das NAS mounten („Mit Server verbinden“ → smb://…, mit schreibfähigem Benutzer). Hier dann diesen Ordner auf dem NAS wählen — die App legt darin einen Ordner an und schreibt eine Testdatei über iOS’ eigenen SMB-Stack (kein libsmb2). Ergebnis steht im Protokoll.")
+            }
         }
         .navigationTitle("Verbindung")
         .navigationBarTitleDisplayMode(.inline)
+        .fileImporter(isPresented: $showSysImporter, allowedContentTypes: [.folder]) { result in
+            runSysWriteTest(result)
+        }
         .sheet(isPresented: $showFolderPicker) {
             SMBFolderPickerView(
                 config: settings.config,
@@ -138,6 +163,42 @@ struct ConnectionSettingsView: View {
                 Log.write("Verbindungstest FEHLER: \(parts.joined(separator: " | "))")
             }
             testing = false
+        }
+    }
+
+    /// Beweis: schreibt über iOS’ eigenen Datei-/SMB-Stack (Dokumenten-Picker + `FileManager`,
+    /// KEIN libsmb2) in einen vom Nutzer gewählten Ordner — z. B. ein in der Dateien-App
+    /// gemountetes SMB-NAS. Legt darin `nasbackup_systest/probe.txt` an und liest sie zurück.
+    private func runSysWriteTest(_ result: Result<URL, Error>) {
+        guard case .success(let url) = result else {
+            if case .failure(let e) = result {
+                Log.write("SYS-SMB Schreibtest: Picker-Fehler — \(e.localizedDescription)")
+            }
+            return
+        }
+        Task {
+            let outcome = await Task.detached { () -> (ok: Bool, msg: String) in
+                let scoped = url.startAccessingSecurityScopedResource()
+                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                Log.write("SYS-SMB Schreibtest: Ziel = \(url.path) (scoped=\(scoped))")
+                let fm = FileManager.default
+                let dir = url.appendingPathComponent("nasbackup_systest", isDirectory: true)
+                let file = dir.appendingPathComponent("probe.txt")
+                do {
+                    try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+                    Log.write("SYS-SMB: Ordner 'nasbackup_systest' angelegt ✓")
+                    try Data("NAS Backup System-SMB Schreibtest\n".utf8).write(to: file)
+                    let back = try Data(contentsOf: file)
+                    Log.write("SYS-SMB: geschrieben + zurückgelesen (\(back.count) B) ✓ — SCHREIBEN GEHT")
+                    return (true, "Schreiben erfolgreich (\(url.lastPathComponent)).")
+                } catch {
+                    let ns = error as NSError
+                    Log.write("SYS-SMB Schreibtest FEHLER — \(ns.domain) \(ns.code): \(ns.localizedDescription)")
+                    return (false, "Schreiben verweigert: \(ns.localizedDescription)")
+                }
+            }.value
+            sysOK = outcome.ok
+            sysResult = outcome.msg
         }
     }
 }

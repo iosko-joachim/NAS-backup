@@ -3,7 +3,16 @@
 Alle Builds laufen unter Version **1.0**; die Build-Nummer (`CURRENT_PROJECT_VERSION`)
 wird je TestFlight-Upload hochgezählt. Die frühen Builds waren schnelle TestFlight-Iterationen.
 
-## 1.0 (Build 17) — aktuell
+## 1.0 (Build 18) — aktuell
+
+- **Beweis-Funktion „iOS-Schreibtest in Dateien-Ordner" (System-SMB):** Verbindung →
+  unten „iOS-Schreibtest in Dateien-Ordner …" → Ordner-Picker. Schreibt über iOS’ **eigenen**
+  Datei-/SMB-Stack (`UIDocumentPicker` + `FileManager`, **kein libsmb2**) eine Testdatei in den
+  gewählten Ordner — z. B. ein in der Dateien-App gemountetes SMB-NAS. Zeigt, ob iOS auf den
+  Server schreiben kann (hängt an den Schreibrechten des dort verwendeten Benutzers). Ergebnis
+  inkl. Domain/Code im Protokoll. Schreiben läuft off-main (blockiert die UI nicht).
+
+## 1.0 (Build 17)
 
 - **SMB-Diagnose (Primitiv-Tests):** Neuer Bildschirm (Verbindung → SMB-Optionen →
   „SMB-Diagnose …“) mit **9 nummerierten Buttons**, die je **eine** SMB-Operation isoliert

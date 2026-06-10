@@ -17,7 +17,7 @@ Owlfiles") brach bei großen Mengen (~10 GB / 10.000 Dateien) unzuverlässig ab
 > `STATUS_ACCESS_DENIED`, FTP `553 Permission denied`): Das ist **serverseitig** — der
 > FRITZ!Box-Benutzer braucht **Schreibrecht auf die USB-Platte**. (Die frühere Annahme „SMB
 > ist auf iOS ≥ 18.7 wegen roher Sockets unmöglich" war **falsch** — SMB verbindet dort sauber.)
-> Details: [ISSUES.md](ISSUES.md). Verteilung über **TestFlight** (aktuell Build 17).
+> Details: [ISSUES.md](ISSUES.md). Verteilung über **TestFlight** (aktuell Build 18).
 
 ## Funktionen
 
