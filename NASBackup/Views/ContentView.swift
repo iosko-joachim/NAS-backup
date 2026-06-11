@@ -70,6 +70,7 @@ struct ContentView: View {
                         .tint(.gray)
                     }
             }
+            .onDelete(perform: settings.removeSources)
 
             Button {
                 importingFolder = true
@@ -77,9 +78,13 @@ struct ContentView: View {
                 Label("Ordner hinzufügen", systemImage: "plus.circle")
             }
         } header: {
-            Text("Quellordner")
+            HStack {
+                Text("Quellordner")
+                Spacer()
+                if !settings.sources.isEmpty { EditButton() }
+            }
         } footer: {
-            Text("Ordner aus „Auf meinem iPhone“ oder einem anderen Files-Speicherort, wird rekursiv kopiert. Zum Abwählen nach links wischen → „Entfernen“ nimmt den Ordner nur aus dieser Liste, es wird nichts auf dem iPhone gelöscht.")
+            Text("Ordner aus „Auf meinem iPhone“ oder einem anderen Files-Speicherort, wird rekursiv kopiert. Zum Abwählen „Bearbeiten“ tippen (rotes Minus) oder nach links wischen → „Entfernen“. Das nimmt den Ordner nur aus dieser Liste, es wird nichts auf dem iPhone gelöscht.")
         }
     }
 

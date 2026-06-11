@@ -70,7 +70,7 @@ struct ConnectionSettingsView: View {
                     Toggle("Passiv-Modus (empfohlen)", isOn: $settings.config.ftpPassive)
                     Toggle("FTPS / TLS (experimentell)", isOn: $settings.config.ftps)
                 }
-                Toggle("Datum + Uhrzeit an Zielordner anhängen (_JJMMTT_HHMMSS)", isOn: $settings.config.appendDateSuffix)
+                Toggle("Datum + Uhrzeit an den Zielordner anhängen (_JJMMTT_HHMMSS)", isOn: $settings.config.appendDateSuffix)
                 Toggle("Strenger Zeitvergleich (auch bei neuerer Datei kopieren)", isOn: $settings.config.strictTimeCheck)
             }
 

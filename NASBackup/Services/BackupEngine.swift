@@ -147,12 +147,14 @@ final class BackupEngine {
         roots = mergedRoots
 
         // 2) Quellen rekursiv scannen -> geplante Dateien.
-        let dateSuffix = makeDateSuffix(enabled: config.appendDateSuffix)
+        // Datums-/Zeit-Suffix (falls aktiv) kommt an den ZIELordner dieses Laufs — NICHT an die
+        // kopierten Quellordner. So landet jeder Lauf in einem eigenen Zeitstempel-Ordner
+        // (z. B. „STEFAN_OTT_260611_143022/Downloads/…"); die Quellordner behalten ihren Namen.
+        let datedTarget = makeDatedTarget(base: config.targetSubpath, enabled: config.appendDateSuffix)
         var planned: [PlannedFile] = []
         for root in roots {
             if cancelToken.isCancelled { finish(.cancelled, "Abgebrochen."); return }
-            let folderName = root.name + dateSuffix
-            planned.append(contentsOf: scan(root: root.url, targetSubpath: config.targetSubpath, folderName: folderName))
+            planned.append(contentsOf: scan(root: root.url, targetSubpath: datedTarget, folderName: root.name))
         }
 
         // 3) Pre-Flight: aktiver Probe-Connect + Klartext-Diagnose (Netz / Berechtigung).
@@ -185,7 +187,7 @@ final class BackupEngine {
         let token = cancelToken
         let snapshot: RemoteSnapshot
         do {
-            snapshot = try await session.snapshot(basePath: config.targetSubpath,
+            snapshot = try await session.snapshot(basePath: datedTarget,
                                                   scope: scope,
                                                   isCancelled: { token.isCancelled })
         } catch {
@@ -200,7 +202,7 @@ final class BackupEngine {
         // versuchen (Kollision würde libsmb2 stören). Inkl. des Basis-Zielordners selbst.
         var createdDirs = snapshot.directories
         if snapshot.baseExists {
-            let base = SMBSession.normalize(config.targetSubpath)
+            let base = SMBSession.normalize(datedTarget)
             if !base.isEmpty {
                 var cur = ""
                 for p in base.split(separator: "/") {
@@ -406,6 +408,15 @@ final class BackupEngine {
         f.locale = Locale(identifier: "en_US_POSIX")
         f.dateFormat = "yyMMdd_HHmmss"
         return "_" + f.string(from: Date())
+    }
+
+    /// Hängt (falls aktiv) das Datums-/Zeit-Suffix an den ZIELordner-Pfad dieses Laufs an.
+    /// Bei leerem Ziel (Freigabe-Wurzel) entsteht ein eigener Lauf-Ordner ohne führenden „_".
+    private func makeDatedTarget(base: String, enabled: Bool) -> String {
+        let suffix = makeDateSuffix(enabled: enabled)   // "" oder "_yyMMdd_HHmmss"
+        guard !suffix.isEmpty else { return base }
+        let trimmed = base.trimmingCharacters(in: CharacterSet(charactersIn: "/ "))
+        return trimmed.isEmpty ? String(suffix.dropFirst()) : trimmed + suffix
     }
 
     private func finish(_ phase: Phase, _ message: String) {
