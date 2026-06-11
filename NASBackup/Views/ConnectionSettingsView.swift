@@ -59,6 +59,7 @@ struct ConnectionSettingsView: View {
             Section("Optionen") {
                 if settings.config.proto == .smb {
                     Toggle("SMB-Verschlüsselung erzwingen", isOn: $settings.config.encrypted)
+                    Toggle("SMB-Signing erzwingen", isOn: $settings.config.smbForceSigning)
                     Button {
                         showDiagnostics = true
                     } label: {

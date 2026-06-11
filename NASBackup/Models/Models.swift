@@ -23,6 +23,13 @@ struct TransferConfig: Codable, Equatable {
     var targetSubpath: String = ""
     /// SMB-Verschlüsselung erzwingen (manche FRITZ!Box-Firmwares mögen das nicht). — nur SMB.
     var encrypted: Bool = false
+    /// SMB-Signing client-seitig erzwingen. Default AN. Begründung: libsmb2 setzt das echte
+    /// Signier-Flag sonst nur, wenn der Server „signing required" meldet — Standard-Samba UND
+    /// die FRITZ!Box melden aber nur „enabled" → CREATE/Write gehen unsigniert raus → der Server
+    /// verwirft sie (ACCESS_DENIED bei Samba / sofortiger Socket-Abbruch bei der FB6490, die
+    /// Signing verlangt). Mit erzwungenem Signing verbinden beide. AUSSCHALTEN nur zu Testzwecken.
+    /// — nur SMB.
+    var smbForceSigning: Bool = true
     /// Hängt an jeden kopierten Quell-Ordner ein Datums-/Zeit-Suffix `_JJMMTT_HHMMSS` an
     /// (eindeutiger Zielordner je Lauf — hilfreich bei häufigen Tests).
     var appendDateSuffix: Bool = false

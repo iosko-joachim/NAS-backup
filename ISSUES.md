@@ -47,6 +47,38 @@ iOS-Local-Network-EPERM verwechseln. Default/Wildcard (→ SMB 3.1.1) verbinden;
 
 ---
 
+## 🟡 OFFEN (Build 22): Alte FB6490 — Signing PFLICHT, aber >64 KB bricht ab
+
+**Beobachtung an Stefans realer FB6490 (FRITZ!OS, älter; Log 2026-06-11):**
+
+| Signing | Ergebnis |
+|---------|----------|
+| **erzwungen** (Build 20/22) | Verbindung ✓, **kleine** Dateien (≤ 64 KB) werden geschrieben; Datei **> 64 KB** bricht ab: `NSPOSIXErrorDomain 5 — Inconsistency in writing to SMB file handle`, unmittelbar gefolgt von `Read from socket failed, errno:9. Closing socket.` — der **Server schließt** den Socket. Retry trifft dann die schon halb geschriebene Datei (`STATUS_OBJECT_NAME_COLLISION`, mit OVERWRITE_IF aus Build 21 entschärft). |
+| **aus** (Build 21-Default, war falsch) | **gar keine Verbindung**: jeder `connectShare` sofort `Read from socket failed, errno:9` → AMSMB2 meldet `NSPOSIXErrorDomain 1 / Operation not permitted`. |
+
+**Schlussfolgerung:** Die FB6490 **verlangt Signing** (unsigniert = sofortiger Socket-Wegwurf).
+Der Build-21-Default „Signing AUS" war daher **falsch** — er bricht sowohl die FB6490 als auch
+den Standard-Samba (zurück in den ACCESS_DENIED-Bug oben). **Build 22: Default wieder Signing AN.**
+
+**Verbleibendes Problem:** 64 KB = genau eine SMB2-Write-PDU (`smb2_get_max_write_size`); AMSMB2
+chunkt Uploads in `optimizedWriteSize == maxWriteSize`. Die **erste** Write-PDU akzeptiert die Box,
+ab der **zweiten** (Offset 65536) wirft sie die Verbindung weg. Bei **jedem** Connect protokolliert
+libsmb2 zudem `Wrong signature in received PDU` (kann die **Antwort**-Signatur der Box nicht
+verifizieren, läuft aber weiter). Vermutung: das per-PDU-Signing von libsmb2 unter **SMB 3.1.1**
+(GMAC-Aushandlung) ist mit der alten FRITZ!OS-Implementierung bei Folge-PDUs inkompatibel.
+**Lokal nicht reproduzierbar** — Joachims Debian-Samba signiert sauber; nur Stefans Log zeigt es.
+
+**Versuch (Build 22):** Signing + **Verschlüsselung** kombinierbar gemacht (vorher schaltete
+`signing = !encrypted` das Signing bei seal wieder ab → jetzt `signing = true`). Idee: SMB3-seal
+(AES-GCM/CCM-Transform-Header) ersetzt den Signier-Pfad für die Daten-PDUs und umgeht den Abbruch.
+**Test bei Stefan:** „Signing erzwingen" AN **+** „Verschlüsselung erzwingen" AN, großes File sichern.
+- geht durch → gelöst.
+- keine Verbindung → FB6490 kann kein SMB3-Encryption; nächster Hebel: SMB-Dialekt auf **3.0.2**
+  pinnen (erzwingt AES-128-CMAC statt 3.1.1-GMAC). (Achtung: Dialekt-Pinning warf lokalen Samba ab
+  — siehe Signing-Spickzettel; an der FB6490 ungetestet.)
+
+---
+
 ## 🟢 FTP: funktioniert (NWConnection) — Eigenheiten der FRITZ!Box
 
 FTP ist auf modernem iOS der **zuverlässige** Transport. FRITZ!Box-spezifische Punkte:

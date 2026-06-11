@@ -3,7 +3,21 @@
 Alle Builds laufen unter Version **1.0**; die Build-Nummer (`CURRENT_PROJECT_VERSION`)
 wird je TestFlight-Upload hochgezählt. Die frühen Builds waren schnelle TestFlight-Iterationen.
 
-## 1.0 (Build 20) — aktuell
+## 1.0 (Build 22) — aktuell
+
+- **🟢 Signing-Default wieder AN (korrigiert Build 21).** Build 21 hatte den Default versehentlich
+  auf „Signing AUS" gesetzt. Stefans FB6490-Log widerlegt das: **ohne Signing keine Verbindung**
+  (`connectShare` → sofort `errno:9` → „Operation not permitted") — die alte FB6490 **verlangt**
+  Signing, ebenso der Standard-Samba. `TransferConfig.smbForceSigning` jetzt Default `true`.
+- **🟡 Versuch gegen FB6490 >64-KB-Abbruch:** Mit Signing AN verbindet die FB6490 und schreibt
+  **kleine** Dateien; eine Datei **> 64 KB** (= 2. SMB2-Write-PDU) lässt die Box den Socket
+  schließen (`Inconsistency in writing` + `errno:9`). Daher: Signing **und** Verschlüsselung
+  kombinierbar gemacht (`client.signing = true` statt `!encrypted`), damit SMB3-seal (AES-GCM/CCM)
+  den Daten-Pfad übernimmt und das mit alter FRITZ!OS inkompatible per-PDU-Signing umgeht.
+  **Test bei Stefan:** „Signing erzwingen" AN **+** „Verschlüsselung erzwingen" AN. Noch
+  unbestätigt (lokal nicht reproduzierbar, da Joachims Samba sauber signiert). Details in ISSUES.md.
+
+## 1.0 (Build 20)
 
 - **🟢 SMB-Schreiben/Lesen gefixt — libsmb2-Signing-Bug behoben.** Das hartnäckige
   `STATUS_ACCESS_DENIED` (FRITZ!Box **und** lokaler FRITZ.NAS-Samba-Repro) war **kein

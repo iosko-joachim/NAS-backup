@@ -42,7 +42,8 @@ final class SMBSession: RemoteTransport, @unchecked Sendable {
         if manager != nil { await disconnect() }
         let credential = URLCredential(user: user, password: password, persistence: .forSession)
         guard let mgr = SMB2Manager(url: url, credential: credential) else { throw SMBError.managerInit }
-        Log.write("smb: connectShare '\(config.share)' als '\(user)' (verschlüsselt=\(config.encrypted)) …")
+        mgr.forceSMBSigning = config.smbForceSigning
+        Log.write("smb: connectShare '\(config.share)' als '\(user)' (verschlüsselt=\(config.encrypted), signing=\(config.smbForceSigning ? "erzwungen" : "auto")) …")
         do {
             try await mgr.connectShare(name: config.share, encrypted: config.encrypted)
         } catch {

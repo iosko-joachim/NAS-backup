@@ -41,6 +41,12 @@ public class SMB2Manager: NSObject, NSSecureCoding, Codable, NSCopying, CustomRe
     fileprivate let q: DispatchQueue
     fileprivate var _timeout: TimeInterval
 
+    /// Wenn `true`: SMB-Signing client-seitig erzwingen (securityMode required + sign=1) — nötig
+    /// für Server, die Signing nur als „enabled" (nicht „required") melden, z. B. Standard-Samba.
+    /// Wenn `false` (Default): Signing NICHT erzwingen — robuster gegen Server, deren Signing mit
+    /// libsmb2 inkompatibel ist (alte FRITZ!Box FB6490: „Wrong signature in received PDU").
+    public var forceSMBSigning: Bool = false
+
     fileprivate let connectLock = NSLock()
     fileprivate let operationLock = NSCondition()
     fileprivate var operationCount: Int = 0
@@ -1428,13 +1434,28 @@ extension SMB2Manager {
 
     private func initClient(_ client: SMB2Client, encrypted: Bool) {
         // FRITZ!Box & gehärtete Server verlangen oft SMB-Signing -> required statt nur enabled.
-        client.securityMode = [.required]
-        // libsmb2-Bug: Es setzt das echte Signier-Flag smb2->sign nur, wenn der SERVER
-        // "signing required" meldet (libsmb2.c:926). Samba (standalone) meldet nur "enabled"
-        // -> sign bleibt 0 -> unter SMB 3.1.1 wird nur Tree-Connect signiert (Sonderfall in
-        // pdu.c:701), CREATE/opendir gehen UNSIGNIERT raus -> Server verwirft sie als
-        // "Bad signature" -> STATUS_ACCESS_DENIED. Daher Signing hier explizit erzwingen.
-        client.signing = !encrypted
+        if forceSMBSigning {
+            // libsmb2-Bug: Es setzt das echte Signier-Flag smb2->sign nur, wenn der SERVER
+            // "signing required" meldet (libsmb2.c:926). Standard-Samba meldet nur "enabled"
+            // -> sign bleibt 0 -> unter SMB 3.1.1 wird nur Tree-Connect signiert (Sonderfall in
+            // pdu.c:701), CREATE/opendir gehen UNSIGNIERT raus -> Server verwirft sie als
+            // "Bad signature" -> STATUS_ACCESS_DENIED. Daher Signing explizit erzwingen.
+            client.securityMode = [.required]
+            // Signing IMMER an (nicht !encrypted): Auch bei SMB3-Verschlüsselung verlangt eine
+            // signing-pflichtige FB6490 ein signiertes Negotiate/Session-Setup, bevor die
+            // Verschlüsselung greift. Verschlüsselung (seal) und Signing schließen sich nicht aus —
+            // verschlüsselte PDUs tragen ohnehin einen Transform-Header. Wird zusätzlich seal
+            // gesetzt, wandern die Daten-PDUs über AES-GCM/CCM und umgehen das mit der alten
+            // FRITZ!OS inkompatible per-PDU-Signing bei großen (>64 KB) Mehr-PDU-Writes.
+            client.signing = true
+        } else {
+            // Default: Signing NICHT erzwingen. Server, die Signing nur "enabled" melden und es
+            // nicht verlangen (Samba standalone, FRITZ!Box), akzeptieren unsignierte Sessions.
+            // Wichtig für die alte FB6490, deren Signing mit libsmb2 inkompatibel ist
+            // ("Wrong signature in received PDU" + instabiler Socket bei großen Dateien).
+            client.securityMode = [.enabled]
+            client.signing = false
+        }
         client.authentication = .ntlmSsp
         client.seal = encrypted
 
@@ -1716,7 +1737,10 @@ extension SMB2Manager {
             file = try SMB2FileHandle(forOutputAtPath: toPath, on: client)
             try file.seek(offset: offset, from: .start)
         } else {
-            file = try SMB2FileHandle(forCreatingIfNotExistsAtPath: toPath, on: client)
+            // OVERWRITE_IF statt exklusivem CREATE: Ein erneuter Upload (z. B. Retry nach
+            // abgebrochenem Schreiben, der eine halbe Datei hinterließ) überschreibt sie,
+            // statt mit STATUS_OBJECT_NAME_COLLISION zu scheitern.
+            file = try SMB2FileHandle(path: toPath, createDisposition: .overwriteIfExists, on: client)
         }
         let chunkSize = chunkSize > 0 ? chunkSize : file.optimizedWriteSize
         var totalWritten: UInt64 = 0

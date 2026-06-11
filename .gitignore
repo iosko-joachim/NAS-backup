@@ -16,3 +16,8 @@ Package.resolved
 # Vendored package: Quellcode wird eingecheckt, Build-/Index-Artefakte und .git nicht
 Vendor/**/.build/
 Vendor/**/.git/
+
+# Lokale Build-/Tool-Artefakte
+build-dev/
+build/
+tools/__pycache__/
