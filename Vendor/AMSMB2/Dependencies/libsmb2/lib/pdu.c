@@ -491,6 +491,8 @@ smb2_encode_header(struct smb2_context *smb2, struct smb2_iovec *iov,
 
         smb2_set_uint64(iov, 40, hdr->session_id);
         memcpy(iov->buf + 48, hdr->signature, 16);
+
+        smb2_log_pdu(smb2, "TX", hdr);
 }
 
 int
@@ -529,6 +531,8 @@ smb2_decode_header(struct smb2_context *smb2, struct smb2_iovec *iov,
         smb2_get_uint32(iov, 16, &hdr->flags);
         smb2_get_uint32(iov, 20, &hdr->next_command);
         smb2_get_uint64(iov, 24, &hdr->message_id);
+
+        smb2_log_pdu(smb2, "RX", hdr);
 
         if (hdr->flags & SMB2_FLAGS_ASYNC_COMMAND) {
                 smb2_get_uint64(iov, 32, &hdr->async.async_id);

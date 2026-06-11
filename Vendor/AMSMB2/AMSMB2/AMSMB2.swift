@@ -1751,17 +1751,34 @@ extension SMB2Manager {
                 if segment.isEmpty {
                     break
                 }
-                let written = try file.write(toAbsoluteOffset: UInt64(offset ?? 0) + totalWritten, data: segment)
-                if written != segment.count {
-                    throw POSIXError(
-                        .ioError, description: "Inconsistency in writing to SMB file handle."
+                // Short-Write-robust: Manche Server (z. B. die alte FRITZ!Box FB6490) bestätigen
+                // pro WRITE-PDU WENIGER Bytes als gesendet — typischerweise ab der 2. PDU, also
+                // bei Dateien > einer max-write-Einheit (~64 KB). Ein Short-Write ist laut POSIX
+                // legitim; wir schreiben den Rest des Segments einfach weiter, statt aufzugeben
+                // (vorher: sofortiger Abbruch mit „Inconsistency …").
+                var segmentOffset = 0
+                while segmentOffset < segment.count {
+                    let sub = segment.subdata(in: (segment.startIndex + segmentOffset) ..< segment.endIndex)
+                    let written = try file.write(
+                        toAbsoluteOffset: UInt64(offset ?? 0) + totalWritten, data: sub
                     )
-                }
-
-                totalWritten += UInt64(segment.count)
-                var offset = try file.seek(offset: 0, from: .current)
-                if offset > totalWritten {
-                    offset = Int64(totalWritten)
+                    if written <= 0 {
+                        SMB2DebugLog.hook?(
+                            "WRITE-Stopp: 0 Bytes bei Offset \(totalWritten), angefordert \(sub.count), "
+                                + "chunk=\(chunkSize), maxWrite=\(file.maxWriteSize)"
+                        )
+                        throw POSIXError(
+                            .ioError, description: "Inconsistency in writing to SMB file handle."
+                        )
+                    }
+                    if written != sub.count {
+                        SMB2DebugLog.hook?(
+                            "WRITE kurz: \(written)/\(sub.count) Bytes bei Offset \(totalWritten) "
+                                + "(maxWrite=\(file.maxWriteSize)) — schreibe Rest weiter"
+                        )
+                    }
+                    segmentOffset += written
+                    totalWritten += UInt64(written)
                 }
                 if let shouldContinue = progress?(Int64(totalWritten)), !shouldContinue {
                     break

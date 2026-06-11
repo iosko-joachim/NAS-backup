@@ -485,6 +485,61 @@ void smb2_register_error_callback(struct smb2_context *smb2,
         smb2->error_cb = error_cb;
 }
 
+#ifndef _IOP
+static const char *smb2_cmd_name(uint16_t cmd)
+{
+        switch (cmd) {
+        case SMB2_NEGOTIATE:       return "NEGOTIATE";
+        case SMB2_SESSION_SETUP:   return "SESSION_SETUP";
+        case SMB2_LOGOFF:          return "LOGOFF";
+        case SMB2_TREE_CONNECT:    return "TREE_CONNECT";
+        case SMB2_TREE_DISCONNECT: return "TREE_DISCONNECT";
+        case SMB2_CREATE:          return "CREATE";
+        case SMB2_CLOSE:           return "CLOSE";
+        case SMB2_FLUSH:           return "FLUSH";
+        case SMB2_READ:            return "READ";
+        case SMB2_WRITE:           return "WRITE";
+        case SMB2_LOCK:            return "LOCK";
+        case SMB2_ECHO:            return "ECHO";
+        case SMB2_QUERY_DIRECTORY: return "QUERY_DIRECTORY";
+        case SMB2_CHANGE_NOTIFY:   return "CHANGE_NOTIFY";
+        case SMB2_QUERY_INFO:      return "QUERY_INFO";
+        case SMB2_SET_INFO:        return "SET_INFO";
+        case SMB2_OPLOCK_BREAK:    return "OPLOCK_BREAK";
+        default:                   return "CMD";
+        }
+}
+
+/* Siehe libsmb2-private.h. Nutzt error_cb, ohne smb2->error_string/nterror zu
+ * berühren. Loggt vollständig nur die Verbindungs-Handshake-Befehle (cmd 0-4)
+ * sowie jede Antwort mit Fehler-Status — erfolgreiche READ/WRITE-Massen-PDUs
+ * werden bewusst NICHT geloggt, damit das App-Protokoll nicht überläuft. */
+void smb2_log_pdu(struct smb2_context *smb2, const char *dir,
+                    struct smb2_header *hdr)
+{
+        char line[MAX_ERROR_SIZE];
+        int is_reply, is_error, is_handshake;
+
+        if (!smb2 || !smb2->error_cb || !hdr) {
+                return;
+        }
+        is_reply = (hdr->flags & SMB2_FLAGS_SERVER_TO_REDIR) ? 1 : 0;
+        is_error = is_reply && hdr->status != SMB2_STATUS_SUCCESS &&
+                   hdr->status != SMB2_STATUS_PENDING;
+        is_handshake = (hdr->command <= SMB2_TREE_DISCONNECT);
+        if (!is_handshake && !is_error) {
+                return;
+        }
+        snprintf(line, sizeof(line),
+                 "wire %s %s mid=%llu status=0x%08x%s",
+                 dir, smb2_cmd_name(hdr->command),
+                 (unsigned long long)hdr->message_id,
+                 (unsigned int)hdr->status,
+                 (hdr->flags & SMB2_FLAGS_SIGNED) ? " signed" : "");
+        smb2->error_cb(smb2, line);
+}
+#endif /* _IOP */
+
 void smb2_set_nterror(struct smb2_context *smb2, int nterror, const char *error_string, ...)
 {
         if (!smb2)

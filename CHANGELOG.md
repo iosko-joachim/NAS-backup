@@ -3,7 +3,27 @@
 Alle Builds laufen unter Version **1.0**; die Build-Nummer (`CURRENT_PROJECT_VERSION`)
 wird je TestFlight-Upload hochgezählt. Die frühen Builds waren schnelle TestFlight-Iterationen.
 
-## 1.0 (Build 22) — aktuell
+## 1.0 (Build 27) — aktuell
+
+- **🟢 FB6490-Saga gelöst — drei überlagerte Ursachen, getrennt per Wire-Log.**
+  - **Wire-Logging (Build 25):** libsmb2-Patch (`smb2_log_pdu` in `init.c`/`pdu.c`, über den
+    bestehenden `error_cb`/`SMB2DebugLog`-Kanal) protokolliert jede gesendete/empfangene PDU mit
+    NTSTATUS — Handshake vollständig, Daten-PDUs nur bei Fehler-Status (kein Flooding).
+  - **Freigaben-Abfrage (Build 26):** Der Verbindungstest listet vorab die echten Freigaben
+    (`SMBSession.logAvailableShares()` → srvsvc/IPC$). Aufgedeckt: die FB6490 bietet nur `FB6490SO`
+    an; `FREECOM_HDD` ist der Platten-Label (Unterordner), **kein** Freigabename. Das erklärte das
+    „Operation not permitted" = Socket-Abbau nach `RX TREE_CONNECT 0xc00000cc`
+    (STATUS_BAD_NETWORK_NAME). Login + Signing waren immer ok.
+  - **seal löst Signing:** „Verschlüsselung erzwingen" AN (seit Build 22 mit Signing kombinierbar)
+    umgeht die libsmb2↔FRITZ!OS-Signing-Inkompatibilität (`USER_SESSION_DELETED` + „Wrong
+    signature") — SMB3-Transform-Header statt per-PDU-Signatur.
+  - **Short-Write-Fix (Build 27):** Die FB6490 bestätigt bei großen Dateien (> ~64 KB) ab der
+    2. WRITE-PDU weniger Bytes als gesendet. Die Upload-Schleife in `AMSMB2.swift` schreibt den
+    Rest jetzt weiter, statt mit „Inconsistency in writing" abzubrechen.
+- Empfohlene FB6490-Settings: Freigabe `FB6490SO`, Zielordner `FREECOM_HDD/…`, **Signing AN +
+  Verschlüsselung AN**.
+
+## 1.0 (Build 22)
 
 - **🟢 Signing-Default wieder AN (korrigiert Build 21).** Build 21 hatte den Default versehentlich
   auf „Signing AUS" gesetzt. Stefans FB6490-Log widerlegt das: **ohne Signing keine Verbindung**

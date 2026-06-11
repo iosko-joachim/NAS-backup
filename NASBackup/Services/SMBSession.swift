@@ -76,10 +76,39 @@ final class SMBSession: RemoteTransport, @unchecked Sendable {
         manager = nil
     }
 
-    /// Kurzer Verbindungstest (Connect + echo).
+    /// Kurzer Verbindungstest (Connect + echo). Vorher werden — best-effort — die vom Server
+    /// tatsächlich angebotenen Freigaben abgefragt und geloggt. So sieht man bei einem falschen
+    /// Freigabenamen (TREE_CONNECT → STATUS_BAD_NETWORK_NAME) sofort die gültigen Namen.
     func test() async throws {
+        await logAvailableShares()
         try await connect()
         try await manager?.echo()
+    }
+
+    /// Fragt die Freigaben des Servers per srvsvc (über IPC$) ab und schreibt sie ins Protokoll.
+    /// Best-effort: eigener, kurzlebiger Manager; Fehler werden nur geloggt, nie geworfen — der
+    /// Verbindungstest selbst soll dadurch nicht scheitern.
+    func logAvailableShares() async {
+        guard let url = URL(string: "smb://\(config.host)") else { return }
+        let user = config.username.isEmpty ? "guest" : config.username
+        let credential = URLCredential(user: user, password: password, persistence: .forSession)
+        guard let mgr = SMB2Manager(url: url, credential: credential) else { return }
+        mgr.forceSMBSigning = config.smbForceSigning
+        Log.write("smb: frage Freigaben am Server '\(config.host)' ab (IPC$/srvsvc) …")
+        do {
+            let shares = try await mgr.listShares(enumerateHidden: false)
+            if shares.isEmpty {
+                Log.write("smb: Freigaben-Abfrage ok, aber Server meldet keine sichtbaren Freigaben")
+            } else {
+                let names = shares
+                    .map { $0.comment.isEmpty ? "'\($0.name)'" : "'\($0.name)' (\($0.comment))" }
+                    .joined(separator: ", ")
+                Log.write("smb: verfügbare Freigaben: \(names)")
+            }
+        } catch {
+            Log.write("smb: Freigaben-Abfrage fehlgeschlagen — \(Self.describe(error))")
+        }
+        try? await mgr.disconnectShare(gracefully: true)
     }
 
     /// Listet `basePath` (relativ zur Freigabe) rekursiv und liefert Dateien **und**

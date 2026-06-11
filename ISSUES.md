@@ -47,35 +47,41 @@ iOS-Local-Network-EPERM verwechseln. Default/Wildcard (→ SMB 3.1.1) verbinden;
 
 ---
 
-## 🟡 OFFEN (Build 22): Alte FB6490 — Signing PFLICHT, aber >64 KB bricht ab
+## 🟢 GELÖST (Build 26/27): Alte FB6490 — es waren DREI getrennte Probleme
 
-**Beobachtung an Stefans realer FB6490 (FRITZ!OS, älter; Log 2026-06-11):**
+Stefans reale FB6490 (FRITZ!OS, älter) zeigte hartnäckiges „Operation not permitted". Mit dem
+**Wire-Logging** (Build 25, libsmb2-Patch: jede gesendete/empfangene PDU + NTSTATUS, siehe
+`SMB2DebugLog`/`smb2_log_pdu`) ließen sich endlich **drei** überlagerte Ursachen trennen:
 
-| Signing | Ergebnis |
-|---------|----------|
-| **erzwungen** (Build 20/22) | Verbindung ✓, **kleine** Dateien (≤ 64 KB) werden geschrieben; Datei **> 64 KB** bricht ab: `NSPOSIXErrorDomain 5 — Inconsistency in writing to SMB file handle`, unmittelbar gefolgt von `Read from socket failed, errno:9. Closing socket.` — der **Server schließt** den Socket. Retry trifft dann die schon halb geschriebene Datei (`STATUS_OBJECT_NAME_COLLISION`, mit OVERWRITE_IF aus Build 21 entschärft). |
-| **aus** (Build 21-Default, war falsch) | **gar keine Verbindung**: jeder `connectShare` sofort `Read from socket failed, errno:9` → AMSMB2 meldet `NSPOSIXErrorDomain 1 / Operation not permitted`. |
+**1) Falscher Freigabename (der Hauptübeltäter).** Die irreführende Meldung „Operation not
+permitted (errno 1)" war nur der Socket-Abbau **nach** einem fehlgeschlagenen TREE_CONNECT.
+Das Wire-Log zeigte: NEGOTIATE ✓, SESSION_SETUP `0x0 signed` ✓ (Login + Signing **funktionieren**!),
+dann `RX TREE_CONNECT status=0xc00000cc` = **STATUS_BAD_NETWORK_NAME** = „Freigabe gibt es nicht".
+Ursache: `FREECOM_HDD` ist der **Platten-Label**, nicht der SMB-Freigabename. Die FB6490 bietet
+**eine** Freigabe namens **`FB6490SO`** an (nach der Box benannt); die Platte ist ein **Unterordner**
+darin. Bewiesen durch die neue **Freigaben-Abfrage** im Verbindungstest (Build 26,
+`SMBSession.logAvailableShares()` → srvsvc über IPC$): `verfügbare Freigaben: 'FB6490SO'`.
+→ **Richtig:** Freigabe = `FB6490SO`, Zielordner = `FREECOM_HDD/IP13`.
 
-**Schlussfolgerung:** Die FB6490 **verlangt Signing** (unsigniert = sofortiger Socket-Wegwurf).
-Der Build-21-Default „Signing AUS" war daher **falsch** — er bricht sowohl die FB6490 als auch
-den Standard-Samba (zurück in den ACCESS_DENIED-Bug oben). **Build 22: Default wieder Signing AN.**
+**2) Signing-Inkompatibilität bei Folge-PDUs.** Mit korrekter Freigabe verband die Box, aber das
+ECHO danach kam als `0xc0000203 STATUS_USER_SESSION_DELETED` + `Wrong signature in received PDU`
+zurück — libsmb2 und die alte FRITZ!OS sind sich beim per-PDU-Signing (SMB 3.1.1) uneins, die Box
+löscht die Session. **Lösung:** „SMB-Verschlüsselung erzwingen" **AN** (zusätzlich zum Signing,
+seit Build 22 kombinierbar). SMB3-seal (AES-GCM/CCM-Transform-Header) ersetzt den Signier-Pfad →
+kein „Wrong signature" mehr, Session stabil.
 
-**Verbleibendes Problem:** 64 KB = genau eine SMB2-Write-PDU (`smb2_get_max_write_size`); AMSMB2
-chunkt Uploads in `optimizedWriteSize == maxWriteSize`. Die **erste** Write-PDU akzeptiert die Box,
-ab der **zweiten** (Offset 65536) wirft sie die Verbindung weg. Bei **jedem** Connect protokolliert
-libsmb2 zudem `Wrong signature in received PDU` (kann die **Antwort**-Signatur der Box nicht
-verifizieren, läuft aber weiter). Vermutung: das per-PDU-Signing von libsmb2 unter **SMB 3.1.1**
-(GMAC-Aushandlung) ist mit der alten FRITZ!OS-Implementierung bei Folge-PDUs inkompatibel.
-**Lokal nicht reproduzierbar** — Joachims Debian-Samba signiert sauber; nur Stefans Log zeigt es.
+**3) Short-Write bei > 64 KB.** Mit Freigabe + seal lief alles bis auf Dateien > ~64 KB:
+`NSPOSIXErrorDomain 5 — Inconsistency in writing to SMB file handle`. Das Wire-Log entlarvte es als
+**kein** Fehler-Status auf der WRITE-Antwort — die Box **bestätigt ab der 2. Write-PDU weniger Bytes
+als gesendet** (legitimer Short-Write). AMSMB2 gab bei `written != angefordert` sofort auf.
+**Fix (Build 27):** Upload-Schleife in `AMSMB2.swift write(...)` schreibt den **Rest des Segments
+weiter** (innere `while segmentOffset < segment.count`-Schleife), statt abzubrechen; nur bei
+`written <= 0` (echter Stillstand) wird abgebrochen. Diagnose-Zeilen `WRITE kurz: x/y …` zeigen die
+Byte-Zahlen + `maxWrite`.
 
-**Versuch (Build 22):** Signing + **Verschlüsselung** kombinierbar gemacht (vorher schaltete
-`signing = !encrypted` das Signing bei seal wieder ab → jetzt `signing = true`). Idee: SMB3-seal
-(AES-GCM/CCM-Transform-Header) ersetzt den Signier-Pfad für die Daten-PDUs und umgeht den Abbruch.
-**Test bei Stefan:** „Signing erzwingen" AN **+** „Verschlüsselung erzwingen" AN, großes File sichern.
-- geht durch → gelöst.
-- keine Verbindung → FB6490 kann kein SMB3-Encryption; nächster Hebel: SMB-Dialekt auf **3.0.2**
-  pinnen (erzwingt AES-128-CMAC statt 3.1.1-GMAC). (Achtung: Dialekt-Pinning warf lokalen Samba ab
-  — siehe Signing-Spickzettel; an der FB6490 ungetestet.)
+**Empfohlene FB6490-Einstellung:** Freigabe `FB6490SO`, Benutzer mit Schreibrecht, **Signing AN +
+Verschlüsselung AN**. Stand Build 27: Verbindung/Listing/Ordner/kleine Dateien bestätigt grün; der
+Short-Write-Fix für > 64 KB ist ausgeliefert, Stefans Bestätigung noch offen.
 
 ---
 

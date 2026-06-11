@@ -356,6 +356,12 @@ struct smb2dir {
 void smb2_set_nterror(struct smb2_context *smb2, int nterror,
                     const char *error_string, ...);
 
+/* AMSMB2-Diagnose: protokolliert PDU-Header (TX/RX) über den error_cb-Kanal,
+ * ohne den Fehlerzustand zu verändern. Loggt die Handshake-Phase (cmd 0-4)
+ * vollständig und jede Antwort mit Fehler-Status; sonst nichts (kein Flooding). */
+void smb2_log_pdu(struct smb2_context *smb2, const char *dir,
+                    struct smb2_header *hdr);
+
 void smb2_close_connecting_fds(struct smb2_context *smb2);
 
 void *smb2_alloc_init(struct smb2_context *smb2, size_t size);
