@@ -235,14 +235,10 @@ final class BackupEngine {
                 + "(Zeitzone/DST/FAT) — werden über die Größe korrekt übersprungen, nicht neu kopiert.")
         }
 
-        if queue.isEmpty {
-            await session.disconnect()
-            finish(.finished, "Alles aktuell – nichts zu kopieren.")
-            return
-        }
-
-        // 5) Kopieren – Datei für Datei, mit Reconnect + Retry.
-        phase = .copying
+        // 5) Kopieren – Datei für Datei, mit Reconnect + Retry. (Leere Queue = nichts zu
+        // kopieren; die Ordner-Datums-Korrektur unten läuft trotzdem, damit auch bei einem
+        // reinen Skip-Lauf bestehende Ordner ihr Quelldatum bekommen.)
+        if !queue.isEmpty { phase = .copying }
         for file in queue {
             if cancelToken.isCancelled { break }
             currentFileName = file.remotePath
@@ -276,6 +272,7 @@ final class BackupEngine {
         // Ordner-Änderungsdatum auf das Quelldatum setzen — ZULETZT, denn jedes
         // Hineinkopieren von Dateien hebt die mtime des Ordners auf „jetzt". Tiefste
         // Ordner zuerst, damit das Setzen eines Elternordners nicht wieder verschoben wird.
+        // Läuft AUCH bei leerer Queue (repariert Ordner aus früheren Läufen/Builds).
         // Best effort: Fehler hier dürfen den Lauf nicht kippen.
         if !cancelToken.isCancelled, !dirDates.isEmpty {
             statusMessage = "Setze Ordner-Datum …"
@@ -288,6 +285,10 @@ final class BackupEngine {
         await session.disconnect()
 
         let mergeNote = mergedAway > 0 ? " (\(mergedAway) überlappende Quelle(n) zusammengeführt)" : ""
+        if !cancelToken.isCancelled, queue.isEmpty {
+            finish(.finished, "Alles aktuell – nichts zu kopieren.\(mergeNote)")
+            return
+        }
         if cancelToken.isCancelled {
             finish(.cancelled, "Abgebrochen. \(copiedCount) kopiert, \(failedCount) fehlgeschlagen.\(mergeNote)")
         } else {

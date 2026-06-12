@@ -597,11 +597,22 @@ public class SMB2Manager: NSObject, NSSecureCoding, Codable, NSCopying, CustomRe
         }
         
         with(completionHandler: completionHandler) { [stat, smb2Attributes] client in
-            let file = try SMB2FileHandle(forUpdatingAtPath: path, on: client)
+            // Zum Setzen von Timestamps/Attributen (SET_INFO FILE_BASIC_INFORMATION) genügt
+            // FILE_WRITE_ATTRIBUTES. Dieser Zugriff ist auf Dateien UND Verzeichnissen gültig —
+            // anders als ein Schreib-Daten-Open (forUpdatingAtPath), den manche Server (FB6490)
+            // auf einem Verzeichnis ablehnen, wodurch das Ordner-Datum nicht gesetzt würde.
+            // Keine createOptions -> kein NON_DIRECTORY/DIRECTORY_FILE-Zwang, öffnet was existiert.
+            let file = try SMB2FileHandle(
+                path: path,
+                desiredAccess: [.fileWriteAttributes, .fileReadAttributes, .synchronize],
+                shareAccess: [.read, .write],
+                createDisposition: .open,
+                on: client
+            )
             try file.set(stat: stat, attributes: smb2Attributes)
         }
     }
-    
+
     /**
      Sets the attributes of the specified file or directory.
      

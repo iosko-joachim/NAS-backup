@@ -3,7 +3,18 @@
 Alle Builds laufen unter Version **1.0**; die Build-Nummer (`CURRENT_PROJECT_VERSION`)
 wird je TestFlight-Upload hochgezählt. Die frühen Builds waren schnelle TestFlight-Iterationen.
 
-## 1.0 (Build 31) — aktuell
+## 1.0 (Build 32) — aktuell
+
+- **🟢 Ordner-Datum (Quelldatum) wird jetzt auch wirklich gesetzt — Regression aus Build 28 gefixt.**
+  - Ursache: `setAttributes` öffnete das Item via `forUpdatingAtPath` (Schreib-**Daten**-Zugriff).
+    Auf einer **Datei** ok, aber die FB6490 lehnt einen Schreib-Daten-Open auf einem **Verzeichnis**
+    ab → `try?` schluckte den Fehler → Ordner behielt „heute". Fix: Open mit
+    `FILE_WRITE_ATTRIBUTES` (+ read attrs + synchronize), `createDisposition: .open`, ohne
+    `createOptions` — gültig für Dateien **und** Verzeichnisse (SET_INFO FILE_BASIC_INFORMATION).
+  - Zusätzlich: die Ordner-Datums-Korrektur läuft jetzt **auch bei leerer Queue** (reiner
+    Skip-Lauf) → repariert Ordner, die ein älterer Build mit „heute" angelegt hatte.
+
+## 1.0 (Build 31)
 
 - **🔵 Diagnose: umschaltbares „Ausführliches Wire-Log".** Neuer SMB-Schalter in den Optionen
   (Default AUS). AN → libsmb2 protokolliert **jede** gesendete/empfangene PDU (nicht nur Handshake
