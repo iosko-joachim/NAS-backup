@@ -152,9 +152,13 @@ final class BackupEngine {
         // (z. B. „STEFAN_OTT_260611_143022/Downloads/…"); die Quellordner behalten ihren Namen.
         let datedTarget = makeDatedTarget(base: config.targetSubpath, enabled: config.appendDateSuffix)
         var planned: [PlannedFile] = []
+        // Quelldatum jedes (Unter-)Ordners merken, damit die Zielordner am Ende dasselbe
+        // Datum wie die Quelle tragen (genau wie die Dateien) statt des Kopier-Tagesdatums.
+        var dirDates: [String: Date] = [:]
         for root in roots {
             if cancelToken.isCancelled { finish(.cancelled, "Abgebrochen."); return }
-            planned.append(contentsOf: scan(root: root.url, targetSubpath: datedTarget, folderName: root.name))
+            planned.append(contentsOf: scan(root: root.url, targetSubpath: datedTarget,
+                                            folderName: root.name, dirDates: &dirDates))
         }
 
         // 3) Pre-Flight: aktiver Probe-Connect + Klartext-Diagnose (Netz / Berechtigung).
@@ -269,6 +273,18 @@ final class BackupEngine {
             currentFileBytes = 0
         }
 
+        // Ordner-Änderungsdatum auf das Quelldatum setzen — ZULETZT, denn jedes
+        // Hineinkopieren von Dateien hebt die mtime des Ordners auf „jetzt". Tiefste
+        // Ordner zuerst, damit das Setzen eines Elternordners nicht wieder verschoben wird.
+        // Best effort: Fehler hier dürfen den Lauf nicht kippen.
+        if !cancelToken.isCancelled, !dirDates.isEmpty {
+            statusMessage = "Setze Ordner-Datum …"
+            for (path, date) in dirDates.sorted(by: { $0.key.count > $1.key.count }) {
+                if cancelToken.isCancelled { break }
+                try? await session.setModificationDate(date, at: path)
+            }
+        }
+
         await session.disconnect()
 
         let mergeNote = mergedAway > 0 ? " (\(mergedAway) überlappende Quelle(n) zusammengeführt)" : ""
@@ -349,10 +365,24 @@ final class BackupEngine {
         return kept
     }
 
-    private func scan(root: URL, targetSubpath: String, folderName: String) -> [PlannedFile] {
+    private func scan(root: URL, targetSubpath: String, folderName: String,
+                      dirDates: inout [String: Date]) -> [PlannedFile] {
         var files: [PlannedFile] = []
-        let keys: [URLResourceKey] = [.isRegularFileKey, .fileSizeKey, .contentModificationDateKey]
+        let keys: [URLResourceKey] = [.isRegularFileKey, .isDirectoryKey,
+                                      .fileSizeKey, .contentModificationDateKey]
         let rootPath = root.standardizedFileURL.path
+
+        // Top-Level-Quellordner selbst (der Enumerator liefert nur dessen Inhalt) ->
+        // datedTarget/folderName mit dem Quelldatum vormerken.
+        let rootRemote = [targetSubpath, folderName]
+            .map { SMBSession.normalize($0) }
+            .filter { !$0.isEmpty }
+            .joined(separator: "/")
+        if !rootRemote.isEmpty,
+           let rd = try? root.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate {
+            dirDates[SMBSession.normalize(rootRemote)] = rd
+        }
+
         guard let enumerator = FileManager.default.enumerator(
             at: root, includingPropertiesForKeys: keys, options: []
         ) else { return files }
@@ -360,9 +390,6 @@ final class BackupEngine {
         for case let fileURL as URL in enumerator {
             if cancelToken.isCancelled { break }
             let values = try? fileURL.resourceValues(forKeys: Set(keys))
-            guard values?.isRegularFile == true else { continue }
-            let size = Int64(values?.fileSize ?? 0)
-            let mdate = values?.contentModificationDate ?? Date(timeIntervalSince1970: 0)
 
             let filePath = fileURL.standardizedFileURL.path
             var rel = filePath.hasPrefix(rootPath) ? String(filePath.dropFirst(rootPath.count)) : fileURL.lastPathComponent
@@ -372,6 +399,17 @@ final class BackupEngine {
                 .map { SMBSession.normalize($0) }
                 .filter { !$0.isEmpty }
                 .joined(separator: "/")
+
+            // Unterordner: Quelldatum merken (wird am Lauf-Ende auf das Ziel gesetzt).
+            if values?.isDirectory == true {
+                if let d = values?.contentModificationDate, !remotePath.isEmpty {
+                    dirDates[SMBSession.normalize(remotePath)] = d
+                }
+                continue
+            }
+            guard values?.isRegularFile == true else { continue }
+            let size = Int64(values?.fileSize ?? 0)
+            let mdate = values?.contentModificationDate ?? Date(timeIntervalSince1970: 0)
 
             files.append(PlannedFile(sourceURL: fileURL, remotePath: remotePath, size: size, modificationDate: mdate))
         }

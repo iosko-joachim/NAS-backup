@@ -3,7 +3,17 @@
 Alle Builds laufen unter Version **1.0**; die Build-Nummer (`CURRENT_PROJECT_VERSION`)
 wird je TestFlight-Upload hochgezählt. Die frühen Builds waren schnelle TestFlight-Iterationen.
 
-## 1.0 (Build 27) — aktuell
+## 1.0 (Build 28) — aktuell
+
+- **🟢 Zielordner tragen jetzt das Quelldatum** (wie die Dateien) statt des Kopier-Tagesdatums.
+  - `BackupEngine.scan` erfasst zusätzlich die mtime jedes Quell-(Unter-)Ordners inkl. des
+    Top-Level-Ordners; nach dem Kopieren werden die Zielordner per `setModificationDate`
+    auf das Quelldatum gestempelt — **zuletzt** im Lauf (das Hineinkopieren von Dateien
+    hebt die Ordner-mtime sonst auf „jetzt") und **tiefste zuerst**, damit Elternordner
+    nicht wieder verschoben werden. Best effort: Fehler kippen den Lauf nicht.
+  - Funktioniert auf Verzeichnissen, weil `forUpdatingAtPath` kein `NON_DIRECTORY`-Flag setzt.
+
+## 1.0 (Build 27)
 
 - **🟢 FB6490-Saga gelöst — drei überlagerte Ursachen, getrennt per Wire-Log.**
   - **Wire-Logging (Build 25):** libsmb2-Patch (`smb2_log_pdu` in `init.c`/`pdu.c`, über den
