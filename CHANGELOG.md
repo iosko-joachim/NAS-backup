@@ -3,7 +3,18 @@
 Alle Builds laufen unter Version **1.0**; die Build-Nummer (`CURRENT_PROJECT_VERSION`)
 wird je TestFlight-Upload hochgezählt. Die frühen Builds waren schnelle TestFlight-Iterationen.
 
-## 1.0 (Build 29) — aktuell
+## 1.0 (Build 30) — aktuell
+
+- **🟢 SMB-Snapshot listet nicht mehr den ganzen Zielbaum rekursiv — fixt Endlosschleife beim
+    zweiten Lauf.** Mit dem sauberen Pfad aus Build 29 descendete das `recursive: true`-Listing
+    erstmals wirklich und lief an der FB6490 bei gefülltem Ziel in eine Endlos-/Zyklus-Auflistung
+    (tausende `QUERY_DIRECTORY` → NO_MORE_FILES). `SMBSession.snapshot` listet jetzt — wie FTP —
+    nur die `scope`-Ordner (Eltern der geplanten Dateien) **flach** (`recursive: false`), durch die
+    Quellstruktur begrenzt. Existierende Ordner + Eltern werden weiter für `ensureDirectory`
+    vorgemerkt (kein Neu-Anlegen). Inkrementell-Abgleich greift jetzt sauber; zweiter Lauf hängt
+    nicht mehr und überspringt Unveränderte.
+
+## 1.0 (Build 29)
 
 - **🟢 Inkrementell-Abgleich bei SMB gefixt — SMB kopierte bisher alles bei jedem Lauf neu.**
   - Ursache: `String.appendingPath` (AMSMB2 `Extensions.swift`) erzeugte bei rekursiven Listings

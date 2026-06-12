@@ -111,44 +111,65 @@ final class SMBSession: RemoteTransport, @unchecked Sendable {
         try? await mgr.disconnectShare(gracefully: true)
     }
 
-    /// Listet `basePath` (relativ zur Freigabe) rekursiv und liefert Dateien **und**
-    /// bereits existierende Verzeichnisse. So können wir später nur die wirklich fehlenden
-    /// Ordner anlegen — ohne fehlerträchtige stat-/mkdir-Aufrufe auf existierende Pfade,
-    /// die libsmb2 aus dem Tritt bringen würden.
+    /// Liefert die bereits am Ziel vorhandenen Dateien (für den Inkrementell-Abgleich) und
+    /// die existierenden Verzeichnisse (damit `ensureDirectory` sie nicht neu anzulegen
+    /// versucht — das würde libsmb2 stören).
+    ///
+    /// WICHTIG: NICHT den ganzen Zielbaum rekursiv listen. Das `recursive: true`-Listing
+    /// kann bei einem gefüllten/„zyklischen" Ziel an der FB6490 in eine Endlosschleife von
+    /// `QUERY_DIRECTORY` laufen (NO_MORE_FILES ohne Ende). Stattdessen — wie bei FTP — nur die
+    /// `scope`-Ordner (die Eltern der geplanten Dateien) **flach** listen. Das ist durch die
+    /// Quellstruktur begrenzt, betritt keine unbeteiligten/zyklischen Teile der Platte und
+    /// reicht für den Abgleich (jede geplante Datei wird über ihren vollen Pfad nachgeschlagen).
     func snapshot(basePath: String,
                   scope: Set<String>,
                   isCancelled: @escaping @Sendable () -> Bool) async throws -> RemoteSnapshot {
-        // `scope` wird hier bewusst ignoriert: SMB listet serverseitig in EINEM Roundtrip
-        // rekursiv (schnell) und braucht den vollständigen Verzeichnis-Satz, um ein Neu-Anlegen
-        // existierender Ordner zu vermeiden (das würde libsmb2 stören). Siehe ISSUES.md.
         guard let manager else { throw SMBError.notConnected }
-        if isCancelled() { return RemoteSnapshot() }
-        let path = Self.normalize(basePath)
-        let listingPath = path.isEmpty ? "/" : path
-        let entries: [[URLResourceKey: Any]]
-        do {
-            entries = try await manager.contentsOfDirectory(atPath: listingPath, recursive: true)
-        } catch {
-            // Zielordner existiert (noch) nicht -> leer, baseExists = false.
-            return RemoteSnapshot()
-        }
         var snap = RemoteSnapshot()
-        snap.baseExists = true
-        for e in entries {
-            guard let rawPath = e[.pathKey] as? String else { continue }
-            let key = Self.normalize(rawPath)
-            let isDir = (e[.fileResourceTypeKey] as? URLFileResourceType) == .directory
-                || (e[.isDirectoryKey] as? Bool) == true
-            if isDir {
-                snap.directories.insert(key)
-            } else {
-                let size = (e[.fileSizeKey] as? NSNumber)?.int64Value
-                    ?? Int64(e[.fileSizeKey] as? Int ?? 0)
-                let date = e[.contentModificationDateKey] as? Date
-                snap.files[key] = RemoteEntry(size: size, modificationDate: date)
+        if isCancelled() { return snap }
+
+        for dir in scope.sorted() {
+            if isCancelled() { return snap }
+            let d = Self.normalize(dir)
+            let listingPath = d.isEmpty ? "/" : d
+            let entries: [[URLResourceKey: Any]]
+            do {
+                entries = try await manager.contentsOfDirectory(atPath: listingPath, recursive: false)
+            } catch {
+                // Ordner existiert (noch) nicht -> dort gibt es nichts zu vergleichen.
+                continue
+            }
+            // Ordner existiert -> ihn und alle Eltern (bis inkl. Basis) als vorhanden vormerken,
+            // damit ensureDirectory sie nicht neu anzulegen versucht.
+            snap.baseExists = true
+            markExisting(d, into: &snap.directories)
+            for e in entries {
+                guard let name = e[.nameKey] as? String, name != ".", name != ".." else { continue }
+                let full = Self.normalize(d.isEmpty ? name : d + "/" + name)
+                let isDir = (e[.fileResourceTypeKey] as? URLFileResourceType) == .directory
+                    || (e[.isDirectoryKey] as? Bool) == true
+                if isDir {
+                    snap.directories.insert(full)
+                } else {
+                    let size = (e[.fileSizeKey] as? NSNumber)?.int64Value
+                        ?? Int64(e[.fileSizeKey] as? Int ?? 0)
+                    let date = e[.contentModificationDateKey] as? Date
+                    snap.files[full] = RemoteEntry(size: size, modificationDate: date)
+                }
             }
         }
         return snap
+    }
+
+    /// Trägt `path` und alle seine Elternpfade in `set` ein (für den „existiert bereits"-Satz).
+    private func markExisting(_ path: String, into set: inout Set<String>) {
+        let p = Self.normalize(path)
+        guard !p.isEmpty else { return }
+        var cur = ""
+        for part in p.split(separator: "/") {
+            cur = cur.isEmpty ? String(part) : cur + "/" + String(part)
+            set.insert(cur)
+        }
     }
 
     /// Listet die direkten Unterverzeichnisse (eine Ebene) unter `basePath` — für den Ziel-Browser.
