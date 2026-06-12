@@ -47,6 +47,11 @@ public class SMB2Manager: NSObject, NSSecureCoding, Codable, NSCopying, CustomRe
     /// libsmb2 inkompatibel ist (alte FRITZ!Box FB6490: „Wrong signature in received PDU").
     public var forceSMBSigning: Bool = false
 
+    /// Wenn `true`: ausführliches Wire-Log — JEDE gesendete/empfangene SMB-PDU wird protokolliert
+    /// (nur für Diagnose; bei großen Backups flutet das das Log). Default `false` = nur Handshake +
+    /// Fehler-Antworten. Wirkt prozessweit (globales libsmb2-Flag), wird in `initClient` gesetzt.
+    public var verboseWireLog: Bool = false
+
     fileprivate let connectLock = NSLock()
     fileprivate let operationLock = NSCondition()
     fileprivate var operationCount: Int = 0
@@ -1433,6 +1438,8 @@ extension SMB2Manager {
     }
 
     private func initClient(_ client: SMB2Client, encrypted: Bool) {
+        // Ausführliches Wire-Log global setzen (Diagnose). Prozessweites libsmb2-Flag.
+        smb2_set_wire_log_all(verboseWireLog ? 1 : 0)
         // FRITZ!Box & gehärtete Server verlangen oft SMB-Signing -> required statt nur enabled.
         if forceSMBSigning {
             // libsmb2-Bug: Es setzt das echte Signier-Flag smb2->sign nur, wenn der SERVER

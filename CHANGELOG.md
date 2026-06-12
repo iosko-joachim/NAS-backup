@@ -3,7 +3,16 @@
 Alle Builds laufen unter Version **1.0**; die Build-Nummer (`CURRENT_PROJECT_VERSION`)
 wird je TestFlight-Upload hochgezählt. Die frühen Builds waren schnelle TestFlight-Iterationen.
 
-## 1.0 (Build 30) — aktuell
+## 1.0 (Build 31) — aktuell
+
+- **🔵 Diagnose: umschaltbares „Ausführliches Wire-Log".** Neuer SMB-Schalter in den Optionen
+  (Default AUS). AN → libsmb2 protokolliert **jede** gesendete/empfangene PDU (nicht nur Handshake
+  + Fehler). Verkabelung: `TransferConfig.verboseWireLog` → `SMB2Manager.verboseWireLog` →
+  globales libsmb2-Flag via neuem `smb2_set_wire_log_all()` (in `init.c`, deklariert in
+  `libsmb2.h`), ausgewertet in `smb2_log_pdu`. Nur zum Debuggen anschalten — flutet bei großen
+  Backups das Log.
+
+## 1.0 (Build 30)
 
 - **🟢 SMB-Snapshot listet nicht mehr den ganzen Zielbaum rekursiv — fixt Endlosschleife beim
     zweiten Lauf.** Mit dem sauberen Pfad aus Build 29 descendete das `recursive: true`-Listing

@@ -510,10 +510,22 @@ static const char *smb2_cmd_name(uint16_t cmd)
         }
 }
 
+/* Globaler Schalter für ausführliches Wire-Log. 0 = nur Handshake + Fehler
+ * (Default, damit Massen-READ/WRITE das App-Protokoll nicht überlaufen),
+ * 1 = JEDE gesendete/empfangene PDU loggen (nur für Diagnose). Wird von der
+ * App über smb2_set_wire_log_all() gesetzt. */
+int smb2_wire_log_all_flag = 0;
+
+void smb2_set_wire_log_all(int on)
+{
+        smb2_wire_log_all_flag = on ? 1 : 0;
+}
+
 /* Siehe libsmb2-private.h. Nutzt error_cb, ohne smb2->error_string/nterror zu
- * berühren. Loggt vollständig nur die Verbindungs-Handshake-Befehle (cmd 0-4)
+ * berühren. Loggt im Default nur die Verbindungs-Handshake-Befehle (cmd 0-4)
  * sowie jede Antwort mit Fehler-Status — erfolgreiche READ/WRITE-Massen-PDUs
- * werden bewusst NICHT geloggt, damit das App-Protokoll nicht überläuft. */
+ * werden bewusst NICHT geloggt, damit das App-Protokoll nicht überläuft.
+ * Ist smb2_wire_log_all_flag gesetzt, wird ALLES geloggt. */
 void smb2_log_pdu(struct smb2_context *smb2, const char *dir,
                     struct smb2_header *hdr)
 {
@@ -527,7 +539,7 @@ void smb2_log_pdu(struct smb2_context *smb2, const char *dir,
         is_error = is_reply && hdr->status != SMB2_STATUS_SUCCESS &&
                    hdr->status != SMB2_STATUS_PENDING;
         is_handshake = (hdr->command <= SMB2_TREE_DISCONNECT);
-        if (!is_handshake && !is_error) {
+        if (!smb2_wire_log_all_flag && !is_handshake && !is_error) {
                 return;
         }
         snprintf(line, sizeof(line),

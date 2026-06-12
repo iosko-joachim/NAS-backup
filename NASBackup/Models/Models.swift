@@ -37,6 +37,9 @@ struct TransferConfig: Codable, Equatable {
     /// FAT/Zeitzonen/DST-Versatz sonst unveränderte Dateien endlos neu kopieren lässt.
     /// Default = Vergleich nur über Dateigröße (zeitzonensicher).
     var strictTimeCheck: Bool = false
+    /// Diagnose: ausführliches SMB-Wire-Log (jede gesendete/empfangene PDU). Default AUS, weil es
+    /// bei großen Backups das Log flutet. Nur zum Debuggen anschalten. — nur SMB.
+    var verboseWireLog: Bool = false
     // MARK: FTP-spezifisch
     /// FTP-Port (Standard 21).
     var ftpPort: Int = 21

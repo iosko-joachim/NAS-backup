@@ -66,6 +66,7 @@ struct ConnectionSettingsView: View {
                         Label("SMB-Diagnose (Primitiv-Tests) …", systemImage: "stethoscope")
                     }
                     .disabled(!settings.config.isComplete)
+                    Toggle("Ausführliches Wire-Log (Diagnose)", isOn: $settings.config.verboseWireLog)
                 } else {
                     Toggle("Passiv-Modus (empfohlen)", isOn: $settings.config.ftpPassive)
                     Toggle("FTPS / TLS (experimentell)", isOn: $settings.config.ftps)

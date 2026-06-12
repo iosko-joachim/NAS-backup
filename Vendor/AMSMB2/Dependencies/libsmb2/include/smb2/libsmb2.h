@@ -361,6 +361,12 @@ void smb2_set_seal(struct smb2_context *smb2, int val);
  */
 void smb2_set_sign(struct smb2_context *smb2, int val);
 
+/*
+ * Schaltet das ausführliche Wire-Log (jede gesendete/empfangene PDU) global an/aus.
+ * 0 = nur Handshake + Fehler-Antworten (Default), !0 = alles (nur für Diagnose).
+ */
+void smb2_set_wire_log_all(int on);
+
 enum smb2_sec {
         SMB2_SEC_UNDEFINED = 0,
         SMB2_SEC_NTLMSSP,

@@ -43,7 +43,8 @@ final class SMBSession: RemoteTransport, @unchecked Sendable {
         let credential = URLCredential(user: user, password: password, persistence: .forSession)
         guard let mgr = SMB2Manager(url: url, credential: credential) else { throw SMBError.managerInit }
         mgr.forceSMBSigning = config.smbForceSigning
-        Log.write("smb: connectShare '\(config.share)' als '\(user)' (verschlüsselt=\(config.encrypted), signing=\(config.smbForceSigning ? "erzwungen" : "auto")) …")
+        mgr.verboseWireLog = config.verboseWireLog
+        Log.write("smb: connectShare '\(config.share)' als '\(user)' (verschlüsselt=\(config.encrypted), signing=\(config.smbForceSigning ? "erzwungen" : "auto")\(config.verboseWireLog ? ", Wire-Log=voll" : "")) …")
         do {
             try await mgr.connectShare(name: config.share, encrypted: config.encrypted)
         } catch {
@@ -94,6 +95,7 @@ final class SMBSession: RemoteTransport, @unchecked Sendable {
         let credential = URLCredential(user: user, password: password, persistence: .forSession)
         guard let mgr = SMB2Manager(url: url, credential: credential) else { return }
         mgr.forceSMBSigning = config.smbForceSigning
+        mgr.verboseWireLog = config.verboseWireLog
         Log.write("smb: frage Freigaben am Server '\(config.host)' ab (IPC$/srvsvc) …")
         do {
             let shares = try await mgr.listShares(enumerateHidden: false)
