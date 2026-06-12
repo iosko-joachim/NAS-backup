@@ -243,7 +243,7 @@ extension String {
         if result.hasSuffix("/") || result.hasSuffix("\\") {
             result.removeLast()
         }
-        result = self + "/" + component.trimmedPath
+        result = result + "/" + component.trimmedPath
         if isDirectory && !result.hasSuffix("/") {
             result += "/"
         }

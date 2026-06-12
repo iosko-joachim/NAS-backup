@@ -235,9 +235,13 @@ final class SMBSession: RemoteTransport, @unchecked Sendable {
         }
     }
 
-    /// Normalisiert Pfade: Forward-Slashes, kein führender/abschließender Slash.
+    /// Normalisiert Pfade: Forward-Slashes, keine führenden/abschließenden UND keine
+    /// inneren Doppel-Slashes. Letzteres ist wichtig für den Inkrementell-Abgleich:
+    /// rekursive Listings können `Ordner//datei` liefern; ohne Kollabieren würde der
+    /// Schlüssel nie zum geplanten `Ordner/datei` passen → alles würde neu kopiert.
     static func normalize(_ path: String) -> String {
         var p = path.replacingOccurrences(of: "\\", with: "/")
+        while p.contains("//") { p = p.replacingOccurrences(of: "//", with: "/") }
         while p.hasPrefix("/") { p.removeFirst() }
         while p.hasSuffix("/") { p.removeLast() }
         return p

@@ -3,7 +3,21 @@
 Alle Builds laufen unter Version **1.0**; die Build-Nummer (`CURRENT_PROJECT_VERSION`)
 wird je TestFlight-Upload hochgezählt. Die frühen Builds waren schnelle TestFlight-Iterationen.
 
-## 1.0 (Build 28) — aktuell
+## 1.0 (Build 29) — aktuell
+
+- **🟢 Inkrementell-Abgleich bei SMB gefixt — SMB kopierte bisher alles bei jedem Lauf neu.**
+  - Ursache: `String.appendingPath` (AMSMB2 `Extensions.swift`) erzeugte bei rekursiven Listings
+    einen **Doppel-Slash** (`Ordner//datei`), weil Z. 246 wieder `self` statt des getrimmten
+    `result` benutzte. `SMBSession.normalize` entfernte nur führende/abschließende Slashes →
+    der Snapshot-Schlüssel `IP13/Ordner//datei` matchte nie den geplanten `IP13/Ordner/datei`
+    → jede Datei in einem Unterordner galt als „fehlt" → wurde jeden Lauf neu kopiert.
+    (FTP baut die Schlüssel sauber → war nie betroffen.)
+  - **Fix (zwei Stellen):** (1) Wurzel in `appendingPath` korrigiert (`result + "/" + …`).
+    (2) `normalize` kollabiert zusätzlich innere Doppel-Slashes (Härtung) — fixt zugleich den
+    Verzeichnis-Satz, sodass `ensureDirectory` vorhandene Unterordner nicht mehr neu anzulegen
+    versucht. Zweiter Lauf in denselben Ordner überspringt jetzt Unveränderte (wie FTP).
+
+## 1.0 (Build 28)
 
 - **🟢 Zielordner tragen jetzt das Quelldatum** (wie die Dateien) statt des Kopier-Tagesdatums.
   - `BackupEngine.scan` erfasst zusätzlich die mtime jedes Quell-(Unter-)Ordners inkl. des
